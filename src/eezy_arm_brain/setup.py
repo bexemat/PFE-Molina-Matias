@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'controller = eezy_arm_brain.controller:main',
+            'gui = eezy_arm_brain.gui_node:main',
         ],
     },
 )
