@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'controller = eezy_arm_brain.controller:main',
             'gui = eezy_arm_brain.gui_node:main',
+            'serial_bridge = eezy_arm_brain.serial_bridge:main',
         ],
     },
 )
