@@ -1,0 +1,12 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from extra_interfaces/msg/Trama.msg
+// generated code does not contain a copyright notice
+
+
+module extra_interfaces {
+  module msg {
+    struct Trama {
+      string data;
+    };
+  };
+};

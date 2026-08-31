@@ -1,0 +1,914 @@
+\documentclass[12pt, a4paper]{report}
+
+% Paquetes esenciales
+\usepackage[utf8]{inputenc}
+\usepackage[spanish, es-tabla]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{cite}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usepackage{array}
+\usetikzlibrary{calc, babel}
+
+
+% Configuracion de margenes
+\geometry{top=3cm, bottom=3cm, left=3cm, right=3cm}
+
+% Estilo de titulos
+\titleformat{\chapter}{\normalfont\huge\bfseries}{\thechapter.}{20pt}{\Huge}
+
+\title{Integración de Sistema de Visión Artificial y Planificación Dinámica de Trayectorias para una Celda de Clasificación Pick-and-Place sobre una Plataforma Robótica Existente}
+\author{Matías Exequiel Molina}
+\date{2026}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    \Large Universidad Nacional de Cuyo \\
+    \large Facultad de Ingeniería \\
+    \vspace{1cm}
+    \Huge \textbf{Proyecto Final de Estudios} \\
+    \vspace{0.5cm}
+    \large Ingeniería en Mecatrónica \\
+    \vspace{2cm}
+    \Huge \textbf{Integración de Sistema de Visión Artificial y Planificación Dinámica de Trayectorias} \\
+    \vspace{1cm}
+    \large \textit{Continuación y evolución del sistema robótico de Agüero y Lezcano} \\
+    \vspace{2cm}
+    \textbf{Alumno:} Matías Exequiel Molina \\
+    \textbf{Director:} Eric Sanchez \\
+    \vspace{2cm}
+    Mendoza, Argentina \\
+    2026
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\chapter{Introducción}
+\section{Contexto del Proyecto}
+El presente Proyecto Final de Estudios (PFE) constituye una evolución técnica y funcional del sistema robótico paralelo tipo "pick-and-place" desarrollado previamente por Emanuel Agüero y Agustín Lezcano. El sistema original ya integraba ROS 2 como estándar de comunicación, una base sólida que este proyecto retoma y potencia para transformar el prototipo en una celda de manufactura más robusta, escalable y alineada con las mejores prácticas de la ingeniería de software industrial.
+
+\section{Evolución, Diagnóstico y Reingeniería del Sistema}
+La motivación principal para dar continuidad al proyecto desarrollado por Agüero y Lezcano surgió de la necesidad de evolucionar el prototipo original. El sistema heredado ya integraba clasificación por visión artificial para la manipulación de elementos comerciales, tales como rodamientos, tuercas, tornillos y llaves fijas. Sin embargo, la operación original se limitaba a un enfoque completamente estático, recogiendo las piezas dispuestas directamente sobre una superficie fija de trabajo. El objetivo de este nuevo proyecto fue dar un salto cualitativo hacia el realismo de una celda de manufactura de estándar industrial, para lo cual se diseñó e incorporó una cinta transportadora física. Esto permitió migrar hacia un sistema dinámico capaz de interceptar los objetos en continuo movimiento basándose íntegramente en la retroalimentación de la visión artificial.
+
+Al recibir la maqueta física y el código fuente, la etapa inicial de relevamiento presentó una alta complejidad técnica. El firmware original operaba sobre un archivo monolítico (\texttt{main.c}) con más de 1000 líneas de código. A nivel de software de alto nivel, si bien el nodo de supervisión en ROS 2 era funcional para sus desarrolladores originales, su operación carecía de una interfaz visual orientada al usuario. Debido a la complejidad en la estructura de los comandos y a la curva de aprendizaje inicial del ecosistema ROS 2, durante las primeras pruebas prácticas solo se logró aislar y replicar exitosamente el accionamiento básico del solenoide del efector final. Ante este escenario, y con el propósito de establecer una base sólida, comprensible y escalable para el desarrollo futuro y para futuros alumnos, se decidió realizar una reestructuración profunda.
+
+El primer paso consistió en modularizar el firmware del microcontrolador y desarrollar desde cero una nueva Interfaz Gráfica de Usuario (GUI) interactiva. Esta interfaz se dotó de controles deslizantes para el posicionamiento angular directo de cada motor y comandos discretos para la secuencia de \textit{homing} y la sujeción magnética. El proceso de integración comenzó vinculando la telemetría de los sensores magnéticos de posición hacia la interfaz, lo que permitió observar en tiempo real el comportamiento cinemático al mover el brazo manualmente. Tras verificar esta lectura, se logró la correcta ejecución del \textit{homing} y el solenoide. Posteriormente, se implementó un nuevo tópico dedicado a la recepción de comandos articulares punto a punto (P2P), generando trayectorias con perfiles de velocidad trapezoidal. Esto marcó el primer hito de control autónomo del manipulador.
+
+Sin embargo, durante la fase de validación de movimientos surgieron fallas críticas e intermitentes. Los motores Q2 (hombro) y Q3 (muñeca) presentaban vibraciones severas, y en ocasiones, el motor principal de elevación (Q2) perdía totalmente la tracción, girando en vacío al recibir una consigna. Para aislar el problema, se procedió a desmontar el brazo y enviar comandos a los motores desacoplados de la estructura, comprobando que el software y la electrónica operaban correctamente. La inspección física reveló dos problemas fundamentales: a nivel eléctrico, un cable de fase del motor Q3 presentaba cortes internos; y a nivel mecánico, existían graves deficiencias en los acoples de transmisión. Se comprobó que el engranaje impreso del motor Q3 había cedido ante el momento torsor, destruyendo el alojamiento de los prisioneros de fijación, mientras que el motor Q2 había estado operando únicamente por fricción.
+
+Para solucionar esta falla estructural, se llevó a cabo una reingeniería de los acoples. Utilizando un torno y fresas para metal, se mecanizaron los ejes cilíndricos de los motores paso a paso para incorporar un sistema de unión por chaveta. Simultáneamente, se rediseñaron e imprimieron en 3D nuevos engranajes que incluyeran el chavetero, manteniendo la fijación por prisionero original pero trasladando el esfuerzo de torsión a la chaveta. Esta intervención eliminó por completo el deslizamiento y las holguras rotacionales.
+
+Una vez resueltas las fallas de transmisión mecánica, un desafío adicional surgió al integrar el control espacial mediante coordenadas cartesianas (X, Y, Z) en la nueva interfaz. Inicialmente, se empleó el modelo cinemático heredado, el cual utilizaba la convención de Denavit-Hartenberg (D-H) e introducía un eslabón y articulación virtual para modelar matemáticamente la restricción de paralelismo del efector impuesta por el mecanismo de cuatro barras. Sin embargo, la contrastación empírica reveló que esta simplificación no reflejaba con precisión la pose real del efector final, evidenciando discrepancias severas especialmente en la coordenada de altura (Z), la cual resultaba ser la variable más crítica y fácil de medir. Los intentos preliminares de mitigar este error mediante factores de corrección empíricos resultaron insatisfactorios, ya que la calibración convergía solo en regiones acotadas del espacio de trabajo y divergía significativamente en otras.
+
+Tras una revisión de la literatura técnica, se decidió descartar el modelo D-H virtualizado y adoptar una aproximación analítica basada en un método geométrico y trigonométrico directo, adaptado específicamente para la morfología de robots paralelos con mecanismos de lazo cerrado. La implementación de este nuevo modelo de cinemática en el software resolvió las incongruencias espaciales. Si bien el sistema conserva un error de posicionamiento residual marginal, se determinó que este es inherente a las tolerancias de fabricación e imperfecciones de las piezas impresas en 3D, resultando un desvío admisible para las exigencias de la tarea estipulada.
+
+Finalmente, con la mecánica y la cinemática estabilizadas, se intentó implementar el seguimiento de trayectorias cartesianas continuas. Se configuró la GUI para enviar tramas de posición a intervalos de 10 ms, buscando la velocidad y reacción necesarias para una futura intercepción dinámica de objetos en la cinta. Sin embargo, el movimiento resultante del brazo era errático y presentaba fuertes vibraciones. Un análisis del flujo de datos determinó que la alta tasa de envío generaba un cuello de botella en el canal de comunicación serial entre el orquestador en la PC (ROS 2) y el microcontrolador (micro-ROS y FreeRTOS), provocando latencias y pérdida de paquetes. Como solución definitiva para asegurar un perfil de velocidad continuo y determinista, se tomó la decisión arquitectónica de eliminar el nodo planificador en ROS 2 y migrar la totalidad del cálculo analítico de trayectorias al nivel embebido, aprovechando la Unidad de Punto Flotante (FPU) del STM32.
+
+\section{Justificación y Objetivos}
+La selección de este PFE se fundamenta en su capacidad para integrar de manera armónica las diversas áreas de la Mecatrónica. La intervención principal se ha centrado en una reingeniería integral: se ha migrado el control hacia una gestión distribuida mediante \textbf{micro-ROS} sobre el \textbf{STM32F446RE}, aplicando principios de código limpio. Asimismo, se optimizó la supervisión mediante una nueva interfaz de control (GUI) intuitiva y se corrigieron deficiencias críticas en la transmisión mecánica y la integridad de señales del bus I2C. Este trabajo reafirma la importancia de la mejora continua sobre plataformas existentes, transformando un desarrollo académico inicial en una herramienta de experimentación avanzada y profesional.
+
+\subsection{Objetivo General}
+Desarrollar e integrar el sistema de procesamiento de visión artificial y planificación dinámica de trayectorias para una celda de clasificación industrial a escala, utilizando como base el brazo robótico de 3 GDL existente y una cinta transportadora independiente, logrando la detección, seguimiento y manipulación de objetos en movimiento dentro del periodo operativo estipulado.
+
+\subsection{Objetivos Específicos}
+\begin{itemize}
+    \item \textbf{Relevamiento y Diagnóstico:} Relevar la arquitectura de control, cinemática y estado actual del sistema robótico existente basándose en el informe técnico de Agüero y Lezcano.
+    \item \textbf{Definición de Módulos:} Determinar formalmente qué componentes del firmware y hardware existentes se reutilizan de manera directa y cuáles requieren modificaciones para la nueva aplicación.
+    \item \textbf{Procesamiento Digital de Imágenes:} Programar un sistema de visión artificial basado en OpenCV (operando en espacio de color HSV) para segmentar, clasificar objetos en categorías básicas y estimar su posición instantánea (X, Y) sobre la banda de transporte.
+    \item \textbf{Desarrollo del Planificador Dinámico:} Diseñar e implementar un algoritmo en el controlador STM32 Nucleo capaz de estimar el punto de intercepción futuro en el espacio de trabajo, sincronizando el efector magnético con la velocidad de la cinta transportadora.
+    \item \textbf{Validación del Prototipo:} Evaluar el desempeño global del sistema mediante métricas experimentales de tasa de éxito, repetibilidad y límites operativos de velocidad.
+    \item \textbf{Supervisión Remota (Opcional):} Configurar de manera secundaria un nodo de comunicación vía ESP32 para el envío de alertas o visualización de estados en un panel local en Node-RED, supeditado al correcto funcionamiento del lazo principal de pick-and-place.
+\end{itemize}
+
+\chapter{Estado del Arte y Antecedentes}
+\section{El Proyecto de Agüero y Lezcano}
+Este PFE se basa en el desarrollo previo realizado por Agüero y Lezcano, quienes implementaron un robot paralelo con visión artificial utilizando YOLOv11n y comunicación vía ROS 2. Como se observa en la Figura~\ref{fig:pfe_anterior}, su trabajo sentó las bases cinemáticas y la primera aproximación a la visión artificial en la plataforma, proporcionando una estructura impresa en 3D que sirve como chasis funcional.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{Imagenes/PFEanterior.png}
+    \caption{PFE de Agüero y Lezcano: Robot paralelo con visión artificial.}
+    \label{fig:pfe_anterior}
+\end{figure}
+
+\section{Robótica serial y paralelo en impresión 3D}
+En el ámbito de la robótica de código abierto, proyectos como \textit{EezyBotArm} han democratizado el acceso a la manipulación robótica (ver Figura~\ref{fig:eezybotarm}). La tendencia actual en la comunidad académica es la migración de actuadores servomotores estándar hacia motores paso a paso con encoders absolutos (como los AS5600 integrados), permitiendo una precisión posicional comparable a equipos industriales. La integración de estas mejoras, junto con algoritmos de control de tiempo real, sitúa a este proyecto en el estado del arte de las celdas robotizadas de sobremesa.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{Imagenes/EezyArmBot.png}
+    \caption{Robot Serie con mecanismo de 4 barras.}
+    \label{fig:eezybotarm}
+\end{figure}
+
+\section{Integración de micro-ROS en Sistemas Embebidos}
+La evolución desde ROS 1 hacia ROS 2 ha introducido la capacidad de integrar nodos nativos directamente en microcontroladores mediante micro-ROS. Esta tecnología permite a los microcontroladores (como la familia STM32) participar como entidades de primera clase en el grafo de ROS, garantizando determinismo y reduciendo la latencia de red. Su aplicación en sistemas robóticos distribuidos es un pilar fundamental en arquitecturas modernas de manufactura flexible.
+
+\section{Planificación de Trayectorias Dinámicas en Pick-and-Place}
+Los sistemas tradicionales de manipulación operan de manera estática: el objeto debe detenerse para ser sujetado. Sin embargo, la industria actual requiere la intercepción dinámica. Los algoritmos modernos combinan la estimación de velocidad del objeto (mediante visión artificial o encoders en las cintas) con la generación de trayectorias polinómicas (ej. quínticas) resueltas en tiempo real, permitiendo sincronizar la velocidad del efector final con la de la cinta transportadora en el momento exacto del agarre.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Imagenes/PickAndPlaceComparacion.jpeg}
+    \caption{Comparativa entre Pick-and-Place estático y dinámico.}
+    \label{fig:pick_and_place_comparacion}
+\end{figure}
+
+\chapter{Arquitectura del Sistema}
+\section{Evolución de la Arquitectura de Software y ROS (Antes y Después)}
+En el nivel de supervisión y alto nivel (ROS 2), la reingeniería abarcó la totalidad de los nodos de control para asegurar un enlace robusto y determinista con el microcontrolador:
+
+\begin{itemize}
+    \item \textbf{Nodo de Visión Artificial:} Mientras que la versión previa dependía de esquemas fragmentados, en este trabajo se desarrolló un nodo de visión propio y robusto basado en sockets asíncronos (\texttt{VisionClient} y \texttt{VisionClientNode}), lo que permite una comunicación fluida y no bloqueante para la captura y conversión de coordenadas métricas de los objetos detectados.
+    \item \textbf{Supresión del Planificador en ROS:} El nodo planificador que anteriormente operaba en el espacio de ROS 2 fue completamente suprimido de la computadora, reubicando su lógica analítica directamente en el firmware del STM32. Esto redujo drásticamente el tráfico serial y evitó las discontinuidades en los perfiles de velocidad.
+    \item \textbf{Interfaz de Usuario (GUI):} La interfaz original presentaba restricciones operativas. Se programó un módulo gráfico interactivo completamente desde cero (\texttt{RobotUINode} y vistas en PyQt5) dotado de validación estricta de límites articulares y cartesianos, comandos de homing, cinemática inversa y gestión centralizada de la parada de emergencia (\texttt{E-Stop}).
+    \item \textbf{Orquestador Central (\texttt{MinimalPublisher}):} El núcleo de coordinación fue modificado profundamente para actuar como puente inteligente de hardware. Administra la máquina de estados del manipulador (\texttt{RobotState}) y la sincronización automática de secuencias operativas multi-segmento ($H \rightarrow A \rightarrow B \rightarrow H$) en conjunto con el servidor de visión.
+\end{itemize}
+
+En la Tabla~\ref{tab:comparativa_firmware} se resume la evolución de las características principales de la arquitectura del sistema.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{p{4cm} p{5cm} p{5cm}}
+\toprule
+\textbf{Dimensión} & \textbf{Versión Anterior} & \textbf{Versión Actual} \\
+\midrule
+Organización & Monolítica (\texttt{main.c}) & Modular por componentes \\
+Trayectorias & Procesadas en PC & Planificadas en FPU del STM32 \\
+Control & Acoplado a ROS & Distribuido (Tareas FreeRTOS) \\
+\bottomrule
+\end{tabular}
+\caption{Comparativa técnica del firmware.}
+\label{tab:comparativa_firmware}
+\end{table}
+
+La migración hacia una arquitectura distribuida permitió la separación de los subsistemas en módulos independientes (\textit{kinematics}, \textit{trajectory\_planner}, \textit{microros\_callbacks}), facilitando el mantenimiento y la escalabilidad del sistema.
+
+\section{Arquitectura Interna y Flujo de Datos}
+La arquitectura de control y comunicación de la celda de manufactura se estructuró en tres niveles de abstracción claramente definidos. Esta separación garantiza el determinismo en la inyección de señales físicas, un ancho de banda estable para la telemetría y un procesamiento computacional intensivo sin latencias críticas para el control del hardware.
+
+\subsection{Nivel de Control Embebido (Firmware)}
+Para garantizar la ejecución en tiempo real, el firmware del microcontrolador STM32F446RE fue estructurado sobre el sistema operativo FreeRTOS, configurado con un \textit{tick} base de $1\text{ ms}$ y una asignación de memoria dinámica (Heap) de 46 KB. El núcleo de movimiento del robot opera dentro de una tarea dedicada (\texttt{mControlTask}) con alta prioridad y una frecuencia de actualización estricta de 100 Hz ($10\text{ ms}$).
+
+La delegación de la planificación de trayectorias al nivel embebido requirió el diseño de algoritmos de control robustos que consideraran los límites de los motores paso a paso:
+\begin{itemize}
+    \item \textbf{Desacople de Hardware:} Las señales PWM son generadas íntegramente por hardware a través de los temporizadores TIM2, TIM3 y TIM13, evitando fluctuaciones temporales (\textit{jitter}). La lectura de los sensores absolutos AS5600 se aisló mediante el temporizador TIM7 y un multiplexor I2C, capturando la posición articular de manera continua y no bloqueante.
+    \item \textbf{Planificador en Dos Fases:} El algoritmo genera un perfil polinómico de quinto grado ($C^2$). Se limita la velocidad máxima exigida a los actuadores al $85\%$ de su capacidad física límite (establecida en $1000\text{ Hz}$). Si la intercepción exige violar este límite, el firmware ajusta la duración a un tiempo mínimo viable de seguridad ($T_{\text{min}} \approx 0.6\text{ s}$).
+    \item \textbf{Asentamiento Terminal:} Al finalizar la curva quíntica, se aplica un control PD local ($K_p = 3.5$) con tolerancia estricta ($0.45^\circ$). Para evitar bloqueos provocados por la inercia o la fricción estática de los eslabones impresos en 3D, se configuró un \textit{timeout} de seguridad de $0.8\text{ s}$, tras el cual se corta la energía PWM y se libera la máquina de estados.
+\end{itemize}
+
+\textbf{Descripción Técnica de los Diagramas de Firmware:}
+\begin{itemize}
+    \item \textbf{Bloques Principales (Figura~\ref{fig:diagrama_firmware}):} Ilustra el desacoplo temporal del sistema embebido. La tarea \texttt{defaultTask} gestiona la recepción asíncrona de comandos por micro-ROS y deposita las consignas en \texttt{mid\_PositionQueue}. La tarea de alta prioridad \texttt{mControlTask} corre de forma estricta a 100 Hz, consumiendo la cola para alimentar el lazo de control PD y la generación de pulsos PWM hacia los drivers DRV8825, mientras los encoders AS5600 proveen retroalimentación angular continua.
+    \item \textbf{Detalle 1 (Figura~\ref{fig:diagrama_firmware_detalle1}):} Detalla el flujo de interrupciones sobre la UART2 con DMA circular. El ejecutor \texttt{rclc} procesa las suscripciones de trayectoria cartesiana, consignas punto a punto articulares, control del solenoide y parada de emergencia. Un temporizador interno a 40 Hz publica la telemetría articular sin saturar el bus serial.
+    \item \textbf{Detalle 2 (Figura~\ref{fig:diagrama_firmware_detalle2}):} Muestra el flujo determinista de cálculo en punto flotante (FPU). Al recibir una meta, se valida la cinemática inversa y se ejecuta un perfil quíntico $C^2$. Si el sistema entra en la fase terminal, transiciona a un lazo PD con ganancia $K_p = 3.5$ y una ventana de asentamiento de $0.8\text{ s}$ para absorber la fricción mecánica sin bloquear el planificador.
+    \item \textbf{Detalle 3 (Figura~\ref{fig:diagrama_firmware_detalle3}):} Modela la capa de abstracción de hardware (HAL). Los temporizadores TIM2, TIM3 y TIM13 modulan la frecuencia en hercios para los motores paso a paso. En paralelo, el temporizador TIM7 dispara la máquina de estados no bloqueante por I2C que interroga cíclicamente al multiplexor TCA9548A y a los tres sensores magnéticos AS5600.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Imagenes/FirmwareBloquesPrincipales.png}
+    \caption{Diagrama de bloques Firmware: Bloques Principales de Alto Nivel.}
+    \label{fig:diagrama_firmware}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Imagenes/FirmwareDetalle1.png}
+    \caption{Diagrama de bloques Firmware Detalle 1: defaultTask y micro-ROS.}
+    \label{fig:diagrama_firmware_detalle1}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Imagenes/FirmwareDetalle2.png}
+    \caption{Diagrama de bloques Firmware Detalle 2: mControlTask y Planificador Quíntico.}
+    \label{fig:diagrama_firmware_detalle2}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{Imagenes/FirmwareDetalle3.png}
+    \caption{Diagrama de bloques Firmware Detalle 3: Periféricos y Hardware Físico.}
+    \label{fig:diagrama_firmware_detalle3}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|p{3.3cm}|p{2.3cm}|p{2.6cm}|p{5.8cm}|}
+\hline
+\textbf{Parámetro / Macro} & \textbf{Valor} & \textbf{Módulo} & \textbf{Justificación y Criterio} \\
+\hline
+\texttt{configTOTAL\_}\linebreak\texttt{HEAP\_SIZE} & 46 KB & \texttt{FreeRTOS.h} & Memoria dinámica para stacks de tareas y buffers de micro-ROS. \\
+\hline
+\texttt{CONTROL\_LOOP\_}\linebreak\texttt{PERIOD} & 100 Hz (10 ms) & \texttt{tasks.c} & Periodo de cómputo del planificador quíntico y control PD. \\
+\hline
+\texttt{timer\_period} & 40 Hz (25 ms) & \texttt{tasks.c} & Telemetría angular sin saturar canal UART/DMA. \\
+\hline
+Bus I2C & 400 kHz & \texttt{main.c} & Muestreo de 3 encoders AS5600 vía TIM7 sin bloqueo. \\
+\hline
+\texttt{MAX\_V\_HZ} & 1000 Hz & \texttt{motors.h} & Límite a 1/8 micropaso para evitar pérdidas de paso. \\
+\hline
+\texttt{max\_freq\_safe} & 850 Hz (85\%) & \texttt{traj\_planner.c} & Margen del 15\% para control PD sin saturación. \\
+\hline
+\texttt{t\_min} & 0.60 s & \texttt{traj\_planner.c} & Cota temporal inferior para trayectoria quíntica. \\
+\hline
+\texttt{Kp\_traj} & 3.50 & \texttt{motors.c} & Seguimiento dinámico y superación de fricción estática. \\
+\hline
+\texttt{ANGLE\_}\linebreak\texttt{TOLERANCE} & $0.25^\circ$ / $0.45^\circ$ & \texttt{main.h} & Ventana de convergencia para corte de excitación PWM. \\
+\hline
+Timeout Asentamiento & 0.80 s & \texttt{traj\_planner.c} & Límite para evitar bloqueos por oscilaciones residuales. \\
+\hline
+\end{tabular}
+\caption{Parámetros operativos y criterios de diseño del Firmware (STM32 / FreeRTOS).}
+\label{tab:parametros_firmware}
+\end{table}
+
+\subsection{Puente de Comunicación (micro-ROS)}
+El enlace entre el procesamiento de alto nivel y el control físico se realiza mediante el estándar DDS-XRCE. Una tarea dedicada (\texttt{defaultTask}), operando con prioridad normal y un \textit{stack} de 8 KB, administra el \textit{executor} de micro-ROS.
+
+Esta capa intermedia gestiona la comunicación serial a través de una interfaz UART configurada con DMA circular, asegurando que la recepción asíncrona de datos no consuma ciclos de CPU ni bloquee el control de los motores. Para prevenir la saturación del bus de datos y mantener el determinismo del sistema, el envío de telemetría articular hacia el orquestador se reguló mediante un temporizador de software interno que publica los mensajes a una frecuencia estable de 40 Hz (cada $25\text{ ms}$). Al recibir una trama cartesiana desde el supervisor, el \textit{callback} la deriva inmediatamente a una cola de mensajes no bloqueante (\texttt{mid\_PositionQueue}) para su consumo por la tarea de control.
+
+En la Figura~\ref{fig:diagrama_global} se presenta la estructura global distribuida que interconecta la capa de supervisión en ROS 2 con el hardware embebido a través del agente micro-ROS.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{Imagenes/DiagramaGlobal.png}
+    \caption{Diagrama Global: Arquitectura Distribuida del Sistema.}
+    \label{fig:diagrama_global}
+\end{figure}
+
+\subsection{Nivel de Supervisión y Orquestación (ROS 2)}
+El nivel superior opera en la computadora principal y concentra el procesamiento de visión artificial, el cálculo analítico de intercepción y la máquina de estados operativa. Al delegar la ejecución temporal de los motores al microcontrolador, el orquestador garantiza una toma de decisiones de alto nivel basada en métricas estrictas de validación.
+
+\textbf{Visión Artificial y Determinismo Espacial:}
+El módulo de visión procesa el flujo de la cámara cenital a una frecuencia constante de 30 fotogramas por segundo (actualización cada $33.3\text{ ms}$). Para aislar el cálculo de velocidad de las latencias inherentes del renderizado de la interfaz y el buffer de video, se establecieron dos compuertas espaciales de medición fijas en la entrada de la cinta ($Y_1 = -160.0\text{ mm}$ y $Y_2 = -90.0\text{ mm}$). Este tramo fijo de $70.0\text{ mm}$ garantiza un diferencial de tiempo determinista, permitiendo calcular la velocidad lineal del objeto con alta precisión. Adicionalmente, la clasificación geométrica del objeto se bloquea mediante un "cerrojo espacial" (\textit{latch}) únicamente cuando la pieza transita por el centro óptico de la cámara ($-20.0\text{ mm} \le Y \le 20.0\text{ mm}$). Esta decisión de diseño minimiza la distorsión geométrica periférica y previene falsas clasificaciones causadas por la oclusión temporal del brazo robótico durante la fase de intercepción.
+
+\textbf{Sincronización Dinámica y Filtro de Factibilidad:}
+Una vez validada la velocidad del objeto (dentro del rango operativo estipulado), el sistema calcula analíticamente el tiempo de vuelo hacia la cota fija de intercepción ($Y_{\text{pick}} = +120.0\text{ mm}$) basándose en un modelo de Movimiento Rectilíneo Uniforme (MRU). Al tiempo resultante se le resta un factor de anticipación $T_{\text{anticipo}} = 0.15\text{ s}$. Este parámetro crítico compensa el retardo de magnetización plena del solenoide y la inercia de asentamiento de la estructura plástica, garantizando que el efector espere al objeto totalmente inmóvil y energizado fracciones de segundo antes del contacto. Como medida de seguridad térmica y mecánica, si la velocidad de la cinta exige un tiempo de intercepción inferior a $T_{\text{min}} = 0.85\text{ s}$ (límite físico de aceleración de los motores paso a paso para no perder sincronismo), la máquina de estados emite un aborto cinemático. El manipulador descarta la operación y permanece en guardia, previniendo movimientos erráticos frente a velocidades excesivas de la banda transportadora.
+
+\textbf{Telemetría en Lazo Cerrado y Recuperación de Fallos:}
+El ciclo continuo se rige por un estricto monitoreo de estados que otorga robustez industrial a la celda:
+\begin{itemize}
+    \item \textbf{Validación de Guardia:} El sistema inhabilita la intercepción de nuevos objetos hasta que la telemetría verifique redundamente que las coordenadas tridimensionales del efector se encuentran dentro de una esfera de tolerancia estricta de $\pm 2.0\text{ mm}$ respecto a su posición de reposo inicial.
+    \item \textbf{Evasión de Fuerzas de Corte (\textit{Vertical Lift}):} Tras asegurar el contacto magnético en la coordenada objetivo, la máquina de estados ejecuta una fase de elevación vertical pura hasta $Z = 125.0\text{ mm}$ durante $0.6\text{ s}$. Esta trayectoria aísla el traslado horizontal inmediato, previniendo que la fricción lateral de la cinta en continuo movimiento impacte contra la pieza y quiebre el enlace magnético.
+    \item \textbf{Verificación Continua de Agarre:} Aprovechando el flujo asíncrono y desacoplado de la cámara cenital, el sistema supervisa la coordenada longitudinal de la pieza incluso después de iniciado el ascenso del brazo. Si la visión detecta que el objeto supera la cota $Y = 135.0\text{ mm}$ continuando su viaje por la cinta, se infiere una falla en la retención del solenoide. Inmediatamente, la lógica aborta el enrutamiento hacia la caja de clasificación, desenergiza el circuito para evitar sobrecalentamientos y ejecuta una trayectoria evasiva de retorno a la guardia a alta velocidad ($0.9\text{ s}$), optimizando los tiempos de ciclo al suprimir operaciones de traslado en vacío.
+\end{itemize}
+
+\textbf{Descripción Técnica de los Diagramas del Supervisor:}
+\begin{itemize}
+    \item \textbf{Bloques Principales (Figura~\ref{fig:diagrama_supervisor}):} Representa el lazo de supervisión en la computadora principal. El nodo de visión procesa las capturas a 30 FPS y envía la cinemática del objeto al hilo secundario \texttt{ROS2Thread}. Este hilo comunica mediante señales seguras de Qt (\texttt{pyqtSignal}) a la interfaz \texttt{MainWindowV2}, la cual delega la toma de decisiones dinámicas a la máquina de estados \texttt{PickAndPlaceSMV2}.
+    \item \textbf{Detalle 1 (Figura~\ref{fig:diagrama_supervisor_detalle1}):} Describe la segmentación en espacio de color HSV y el cálculo de momentos espaciales. La velocidad lineal se obtiene de forma determinista midiendo el tiempo de vuelo entre dos compuertas virtuales fijas ($Y_1 = -160.0\text{ mm}$ y $Y_2 = -90.0\text{ mm}$). Asimismo, se implementa un cerrojo óptico (\textit{latch}) en el centro del lente para fijar la clasificación geométrica (Cubo/Cono) mediante las relaciones \textit{Extent} y \textit{Rect Ratio}.
+    \item \textbf{Detalle 2 (Figura~\ref{fig:diagrama_supervisor_detalle2}):} Detalla las transiciones del ciclo continuo: validación de posición de guardia ($\pm 2.0\text{ mm}$), activación del electroimán, cálculo de intercepción MRU hacia $Y = +120.0\text{ mm}$, elevación vertical pura ($Z = 125.0\text{ mm}$ para evitar corte por fricción) y verificación óptica continua de agarre con retorno evasivo rápido ante pérdidas de pieza.
+    \item \textbf{Detalle 3 (Figura~\ref{fig:diagrama_supervisor_detalle3}):} Muestra el desacoplo entre el middleware de comunicaciones y el hilo de renderizado gráfico de PyQt5, garantizando que el refresco visual no introduzca retardos en la recepción de la telemetría embebida.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Imagenes/SupervisorBloquesPrincipales.png}
+    \caption{Diagrama de bloques Supervisor: Bloques Principales de Alto Nivel.}
+    \label{fig:diagrama_supervisor}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Imagenes/SupervisorDetalle1.png}
+    \caption{Supervisor Detalle 1: Visión y Compuertas Espaciales.}
+    \label{fig:diagrama_supervisor_detalle1}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{Imagenes/SupervisorDetalle2.png}
+    \caption{Supervisor Detalle 2: Máquina de Estados (FSM V2).}
+    \label{fig:diagrama_supervisor_detalle2}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Imagenes/SupervisorDetalle3.png}
+    \caption{Supervisor Detalle 3: Hilo ROS 2 y Puente Qt.}
+    \label{fig:diagrama_supervisor_detalle3}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|p{3.3cm}|p{2.3cm}|p{2.6cm}|p{5.8cm}|}
+\hline
+\textbf{Parámetro / Variable} & \textbf{Valor} & \textbf{Módulo} & \textbf{Justificación y Criterio} \\
+\hline
+Tasa Captura Cenital & 30 FPS (33.3 ms) & \texttt{vision\_node.py} & Muestreo sin distorsión temporal. \\
+\hline
+Resolución Video & 640 $\times$ 480 px & \texttt{vision\_node.py} & Balance de resolución y baja latencia. \\
+\hline
+Compuertas $Y_1 \rightarrow Y_2$ & $-160 \rightarrow -90$ mm & \texttt{vision\_node.py} & Tramo fijo ($\Delta Y = 70$ mm) para medir velocidad. \\
+\hline
+Bloqueo Óptico & $[-20, +20]$ mm & \texttt{sm\_v2.py} & Fijación de clase en centro de lente sin oclusiones. \\
+\hline
+Extent / Rect Ratio & $\ge 0.85$ & \texttt{vision\_node.py} & Discriminación invariante a la orientación. \\
+\hline
+Meta Intercepción & $Y = +120.0$ mm & \texttt{sm\_v2.py} & Posición predecible en espacio de trabajo. \\
+\hline
+\texttt{T\_MIN\_ROBOT} & 0.85 s & \texttt{sm\_v2.py} & Filtro de descarte por velocidad excesiva de cinta. \\
+\hline
+$T_{\text{anticipo}}$ & 0.15 s & \texttt{sm\_v2.py} & Compensación de retardo electromagnético. \\
+\hline
+\texttt{POS\_TOLERANCE} & $\pm 2.0$ mm & \texttt{sm\_v2.py} & Verificación en lazo cerrado para reposo en guardia. \\
+\hline
+Elevación ($Z_{\text{lift}}$) & 125.0 mm (0.6 s) & \texttt{sm\_v2.py} & Despegue en Z pura para evitar corte por fricción. \\
+\hline
+Failsafe Agarre & $Y > 135.0$ mm & \texttt{sm\_v2.py} & Detección de caída y retorno rápido (0.9 s). \\
+\hline
+\end{tabular}
+\caption{Parámetros de orquestación, visión y máquina de estados (ROS 2 / Python).}
+\label{tab:parametros_supervisor}
+\end{table}
+
+\section{Protocolos de Interacción Operativos}
+La arquitectura distribuida interconecta el nivel de supervisión en ROS 2 (Python / PyQt5) con la capa de control en tiempo real en la STM32F446RE (C / FreeRTOS / micro-ROS). A continuación se detallan los flujos de interacción para las principales funcionalidades operativas de la celda.
+
+\subsection{Comando Punto a Punto Articular (P2P)}
+El envío de consignas articulares directas permite posicionar el manipulador especificando los ángulos de cada articulación $(\theta_1, \theta_2, \theta_3)$:
+\begin{itemize}
+    \item \textbf{Capa de Supervisión (GUI):} El usuario ajusta los valores mediante los deslizadores o selectores numéricos en la pestaña de control manual de la interfaz gráfica.
+    \item \textbf{Capa de Comunicación (ROS 2):} El método \texttt{send\_cmd} del hilo de comunicación empaqueta los ángulos en un mensaje del tipo \texttt{geometry\_msgs/msg/Point} y los publica a través del tópico \texttt{/microROS/p2p\_cmd}.
+    \item \textbf{Capa Embebida (micro-ROS / Firmware):} El ejecutor del microcontrolador detecta el nuevo dato y ejecuta la función \texttt{p2p\_cmd\_callback}. Esta rutina invoca a \texttt{startSynchronizedP2PMovement()}, la cual calcula los perfiles de rampa de aceleración y velocidad sincronizada para los tres motores paso a paso.
+\end{itemize}
+
+\subsection{Secuencia de Referencia (Homing)}
+La rutina de calibración y posicionamiento inicial al origen del robot se gestiona mediante el siguiente flujo:
+\begin{itemize}
+    \item \textbf{Capa de Supervisión (GUI):} Al presionar el botón de homing, la interfaz activa la señal correspondiente.
+    \item \textbf{Capa de Comunicación (ROS 2):} Se publica un mensaje de tipo booleano (`True`) a través del tópico \texttt{/microROS/homing}.
+    \item \textbf{Capa Embebida (micro-ROS / Firmware):} El callback \texttt{homing\_callback} recibe la orden y ejecuta la función \texttt{doAllHoming()}. Esto desplaza de forma sincronizada cada articulación hacia su ángulo de referencia de homing configurado por hardware.
+\end{itemize}
+
+\subsection{Control del Efector Final (Electroimán / Solenoide)}
+La manipulación y sujeción de piezas metálicas se rige por un control digital de estado:
+\begin{itemize}
+    \item \textbf{Capa de Supervisión (GUI):} El operador conmuta el estado del imán desde la interfaz, lo cual genera un mensaje de control.
+    \item \textbf{Capa de Comunicación (ROS 2):} El nodo orquestador o la UI publican un mensaje tipo \texttt{std\_msgs/msg/Bool} en el tópico \texttt{/microROS/electroiman}.
+    \item \textbf{Capa Embebida (micro-ROS / Firmware):} La función \texttt{electromagnet\_callback} procesa el mensaje y llama a \texttt{electromagnetOn()}, la cual conmuta físicamente los pines del GPIO y el LED indicador mediante la HAL de ST.
+\end{itemize}
+
+\subsection{Parada de Emergencia (E-Stop)}
+Ante situaciones críticas, el sistema implementa una respuesta de seguridad prioritaria:
+\begin{itemize}
+    \item \textbf{Capa de Supervisión (GUI):} Al pulsar la parada de emergencia en cualquier pestaña, se emite una alerta global de interrupción.
+    \item \textbf{Capa de Comunicación (ROS 2):} El orquestador central recibe la orden y difunde un booleano (`True`) a través de los tópicos \texttt{/microROS/emergency\_stop} y \texttt{/planner/emergency\_stop}.
+    \item \textbf{Capa Embebida (micro-ROS / Firmware):} El callback \texttt{estop\_callback} aborta inmediatamente cualquier trayectoria activa en curso, conmuta el estado de los motores a \texttt{MOTOR\_ERROR} y detiene de forma forzosa los PWMs de los temporizadores para desenergizar el sistema de potencia.
+\end{itemize}
+
+\subsection{Planificación Cartesiana y Trayectorias Quínticas (ctraj)}
+La ejecución de movimientos suaves en el espacio cartesiano utiliza las capacidades de cálculo local del microcontrolador:
+\begin{itemize}
+    \item \textbf{Capa de Supervisión (GUI):} Se ingresa la meta cartesiana $(X, Y, Z)$ y la duración deseada de la trayectoria, enviando una trama de datos estructurada.
+    \item \textbf{Capa de Comunicación (ROS 2):} El método \texttt{send\_ctraj\_cmd} publica una estructura de tipo \texttt{extra\_interfaces/msg/Trama} a través del tópico \texttt{/microROS/cmd}.
+    \item \textbf{Capa Embebida (micro-ROS / Firmware):} El callback \texttt{cmd\_callback} recibe la trama y encola los datos cartesianos de manera no bloqueante en \texttt{mid\_PositionQueue}. La tarea de alta prioridad \texttt{mControlTask} evalúa la cola, inicializa el planificador cartesiano mediante \texttt{TrajectoryPlanner\_StartCtraj()}, resuelve la cinemática inversa y ejecuta el control PD en tiempo real sobre los motores.
+\end{itemize}
+
+\chapter{Desarrollos y Mejoras Implementadas}
+
+\section{Evolución del Modelado Cinemático}
+
+\subsection{Análisis del Modelo Anterior y Justificación del Cambio}
+En la versión inicial del proyecto, la cinemática directa se abordó utilizando la convención de Denavit-Hartenberg (D-H) mediante matrices de transformación homogénea. Para la cinemática inversa, se empleó una aproximación geométrica con desacople cinemático que requirió la adición de un eslabón virtual ($L_4$) y un grado de libertad ficticio ($q_4$) para tratar al robot paralelo como una cadena cinemática abierta. 
+
+Si bien este método es funcional, la introducción de estos artificios matemáticos genera un modelo innecesariamente complejo para un mecanismo de lazo cerrado, lo que aumenta el costo computacional y el riesgo de singularidades.
+
+\subsection{Nueva Aproximación: Método Geométrico Directo}
+Con el objetivo de optimizar el cálculo iterativo en tiempo real dentro del microcontrolador STM32F446RE, se reemplazó el modelo híbrido D-H por un enfoque geométrico y trigonométrico puro. Este método mapea fielmente la morfología del robot a partir de las dimensiones físicas validadas mediante el ensamblaje en SolidWorks, eliminando las articulaciones virtuales y absorbiendo los desfases directamente en el cálculo del radio.
+
+Los parámetros geométricos definitivos establecidos para esta versión son:
+\begin{itemize}
+    \item $L_1 = 77.00\text{ mm}$ (Altura de la base al hombro)
+    \item $L_2 = 135.00\text{ mm}$ (Longitud del brazo principal)
+    \item $L_3 = 147.00\text{ mm}$ (Longitud del antebrazo)
+    \item $O_r = 25.49\text{ mm}$ (Offset radial del efector final)
+    \item $O_z = 40.87\text{ mm}$ (Offset vertical del efector final)
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Imagenes/Dimensiones.png}
+    \caption{Validación de parámetros geométricos y offsets del manipulador en SolidWorks.}
+    \label{fig:cinematica_solidworks}
+\end{figure}
+
+\subsection{Cinemática Directa (FK)}
+Conocidos los ángulos articulares absolutos $Q_1$, $Q_2$ y $Q_3$, la posición cartesiana $(X, Y, Z)$ del efector final se obtiene proyectando los eslabones sobre el plano de trabajo. El radio total $R$ incorpora de manera directa el offset radial:
+
+\begin{equation}
+    R = L_2 \cos(Q_2) + L_3 \cos(Q_3) + O_r
+\end{equation}
+
+A partir de este radio, las coordenadas espaciales resultan en:
+
+\begin{align}
+    X &= R \cos(Q_1) \\
+    Y &= R \sin(Q_1) \\
+    Z &= L_1 + L_2 \sin(Q_2) + L_3 \sin(Q_3) - O_z
+\end{align}
+
+\subsection{Cinemática Inversa (IK)}
+Dada una coordenada cartesiana objetivo $(X, Y, Z)$, el ángulo de la base se determina por proyección directa en el plano horizontal:
+
+\begin{equation}
+    Q_1 = \text{atan2}(Y, X)
+\end{equation}
+
+Para resolver el mecanismo en el plano vertical, se define el desplazamiento hacia el nodo de la muñeca restando los offsets constructivos:
+
+\begin{align}
+    r &= \sqrt{X^2 + Y^2} - O_r \\
+    z' &= Z + O_z - L_1
+\end{align}
+
+La distancia lineal $D$ entre la articulación del hombro y la muñeca resulta en:
+
+\begin{equation}
+    D = \sqrt{r^2 + (z')^2}
+\end{equation}
+
+Aplicando el Teorema del Coseno al triángulo físico formado por los eslabones $L_2$, $L_3$ y la distancia $D$, se obtienen los ángulos internos $\beta$ y $\gamma$:
+
+\begin{align}
+    \beta &= \arccos\left(\frac{D^2 + L_2^2 - L_3^2}{2 \cdot D \cdot L_2}\right) \\
+    \gamma &= \arccos\left(\frac{D^2 + L_3^2 - L_2^2}{2 \cdot D \cdot L_3}\right)
+\end{align}
+
+Conociendo el ángulo de elevación de $D$ respecto a la horizontal, definido como $\alpha = \text{atan2}(z', r)$, los ángulos absolutos de las articulaciones quedan definidos por las siguientes expresiones, garantizando implícitamente la configuración "codo arriba":
+
+\begin{align}
+    Q_2 &= \alpha + \beta \\
+    Q_3 &= \alpha - \gamma
+\end{align}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[scale=1.5, >=stealth, font=\sffamily, thick]
+        % Definicion de angulos y longitudes
+        \def\Qtwo{55}
+        \def\Qthree{-30}
+        \def\Ltwo{3.0}
+        \def\Lthree{3.2}
+        
+        % Puntos principales
+        \coordinate (O) at (0,0);
+        \coordinate (E) at (\Qtwo:\Ltwo);
+        \coordinate (W) at ($(E) + (\Qthree:\Lthree)$);
+        
+        % Ejes
+        \draw[->, gray, thin] (-0.5, 0) -- (5.5, 0) node[right, black] {$r$};
+        \draw[->, gray, thin] (0, -0.5) -- (0, 4.0) node[above, black] {$z'$};
+        
+        % Lineas estructurales
+        \draw[dashed, blue!80!black, line width=1pt] (O) -- (W) node[midway, below=2pt] {$D$};
+        \draw[orange!90!black, line width=2.5pt] (O) -- (E) node[midway, above left] {$L_2$};
+        \draw[orange!90!black, line width=2.5pt] (E) -- (W) node[midway, above right] {$L_3$};
+        
+        % Lineas de referencia horizontales
+        \draw[dashed, gray, thin] (E) -- ++(2,0);
+        
+        % Calcular angulo de D (alpha)
+        \pgfmathanglebetweenpoints{\pgfpointorigin}{\pgfpointanchor{W}{center}}
+        \pgfmathsetmacro{\alphaAngle}{\pgfmathresult}
+        
+        % Angulos en el Hombro (O)
+        \draw[->, red!70!black] (0.7,0) arc (0:\Qtwo:0.7) node[midway, right=1pt] {$Q_2$};
+        \draw[->, green!50!black] (1.4,0) arc (0:\alphaAngle:1.4) node[midway, right=1pt] {$\alpha$};
+        \draw[->, purple] (\alphaAngle:2.0) arc (\alphaAngle:\Qtwo:2.0) node[midway, right=1pt] {$\beta$};
+        
+        % Angulos en el Codo (E)
+        \draw[->, red!70!black] ($(E) + (0.9,0)$) arc (0:\Qthree:0.9) node[midway, right=2pt] {$Q_3$};
+        
+        % Angulo gamma en la Muneca (W)
+        \pgfmathsetmacro{\gammaStart}{\Qthree + 180}
+        \pgfmathsetmacro{\gammaEnd}{\alphaAngle + 180}
+        \draw[<-, purple] ($(W) + (\gammaStart:0.6)$) arc (\gammaStart:\gammaEnd:0.6) node[midway, left=2pt] {$\gamma$};
+        
+        % Nodos de articulacion
+        \filldraw[fill=white, draw=black, line width=1pt] (O) circle (0.06) node[below left=2pt] {Hombro $(0,0)$};
+        \filldraw[fill=white, draw=black, line width=1pt] (E) circle (0.06) node[above=4pt] {Codo};
+        \filldraw[fill=white, draw=black, line width=1pt] (W) circle (0.06) node[right=4pt] {Muñeca $(r, z')$};
+        
+    \end{tikzpicture}
+    \caption{Diagrama trigonométrico de la Cinemática Inversa en el plano proyectado $r-z'$, mostrando las relaciones angulares de los eslabones.}
+    \label{fig:diagrama_ik}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[scale=1.5, >=stealth, font=\sffamily, thick]
+        % 1. Definicion de parametros
+        \def\alphaAng{35}   % Inclinacion de D
+        \def\betaAng{45}    % Angulo interno en el hombro
+        \def\gammaAng{60}   % Angulo interno en la muneca
+        \def\Ltwo{3.5}      % Longitud Brazo
+        
+        \pgfmathsetmacro{\Lthree}{\Ltwo * sin(\betaAng) / sin(\gammaAng)}
+        
+        % Angulos absolutos
+        \pgfmathsetmacro{\Qtwo}{\alphaAng + \betaAng}
+        \pgfmathsetmacro{\Qthree}{\alphaAng - \gammaAng}
+        
+        % 2. Coordenadas de los Nodos
+        \coordinate (O) at (0,0);
+        \coordinate (E) at (\Qtwo:\Ltwo);
+        \coordinate (W) at ($(E) + (\Qthree:\Lthree)$);
+        
+        % 3. Lineas de referencia (Horizontales)
+        \draw[dashed, gray, thin] (-0.5,0) -- (4.5,0);
+        \draw[dashed, gray, thin] ($(E) + (-1,0)$) -- ($(E) + (3,0)$);
+        
+        % 4. Linea D (OW) y su paralela exacta pasando por E
+        \draw[dashed, blue, line width=1pt] (O) -- (W) node[midway, below right] {$D$};
+        \draw[dashed, blue, line width=1pt] (E) -- ($(E) + (\alphaAng:2.5)$) coordinate (E_parallel);
+        
+        % 5. Eslabones fisicos
+        \draw[orange!90!black, line width=2.5pt] (O) -- (E) node[midway, above left] {$L_2$};
+        \draw[orange!90!black, line width=2.5pt] (E) -- (W) node[midway, below left] {$L_3$};
+        
+        % 6. Angulos en el Hombro (O)
+        \draw[->, green!50!black] (1.2,0) arc (0:\alphaAng:1.2) node[midway, right=1pt] {$\alpha$};
+        \draw[->, purple] (\alphaAng:1.6) arc (\alphaAng:\Qtwo:1.6) node[midway, above right=-2pt] {$\beta$};
+        
+        % 7. Angulos en el Codo (E)
+        \draw[->, green!50!black] ($(E) + (1.2,0)$) arc (0:\alphaAng:1.2) node[midway, right=1pt] {$\alpha$};
+        \draw[<-, purple] ($(E) + (\Qthree:1.8)$) arc (\Qthree:\alphaAng:1.8) node[midway, right=1pt] {$\gamma$};
+        \draw[->, red!70!black] ($(E) + (0.8,0)$) arc (0:\Qthree:0.8) node[midway, right=1pt] {$Q_3$};
+        
+        % 8. Puntos de Articulacion
+        \filldraw[fill=white, draw=black, line width=1pt] (O) circle (0.06) node[below left] {Hombro $(O)$};
+        \filldraw[fill=white, draw=black, line width=1pt] (E) circle (0.06) node[above=4pt] {Codo $(E)$};
+        \filldraw[fill=white, draw=black, line width=1pt] (W) circle (0.06) node[below=4pt] {Muñeca $(W)$};
+        
+    \end{tikzpicture}
+    \caption{Demostración visual del ángulo $Q_3$. Al trazar una línea paralela a $D$ desde el Codo, se observa por ángulos alternos internos que la inclinación absoluta del antebrazo es $Q_3 = \alpha - \gamma$.}
+    \label{fig:demostracion_q3}
+\end{figure}
+
+\section{Reingeniería de acoples mecánicos (Unión por chavetero)}
+Con el fin de resolver los problemas de deslizamiento y holgura torsional detectados en los acoples originales del sistema heredado, se llevó a cabo una reingeniería integral de la transmisión mecánica. Esta intervención consistió en el mecanizado de los ejes cilíndricos de los motores paso a paso para incorporar un alojamiento preciso, combinado con el rediseño y fabricación de los engranajes plásticos impresos en 3D para integrar una unión por chaveta. Esta solución garantiza una transmisión de torque rígida y elimina las desalineaciones angulares durante la operación de los ejes.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Imagenes/engranajeAnterior.png} 
+        \caption{Engranaje original con acople por fricción.}
+        \label{fig:engranaje_anterior}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Imagenes/engranajeModificado.png} 
+        \caption{Engranaje impreso en 3D con unión por chaveta.}
+        \label{fig:engranaje_chaveta}
+    \end{subfigure}
+    \caption{Comparativa de la reingeniería mecánica de engranajes.}
+    \label{fig:reingenieria_mecanica}
+\end{figure}
+
+\section{Optimización de la integridad de señal en buses I2C}
+Durante las pruebas iniciales del sistema, se detectaron anomalías e intermitencias en la comunicación con los sensores magnéticos basados en el protocolo I2C. Tras una revisión detallada del hardware, se identificó que el arnés de cables original presentaba un error de diseño físico: las líneas de reloj (\textit{SCL}) y de datos (\textit{SDA}) se encontraban trenzadas entre sí. Esta práctica es incorrecta para este tipo de buses, ya que propicia un acoplamiento capacitivo y diafonía (\textit{cross-talk}) mutua entre las señales digitales de alta frecuencia.
+
+Para eliminar el ruido electromagnético inducido y garantizar la estabilidad de la comunicación, se rediseñó el tendido del bus separando las líneas de señal y aplicando un esquema de par trenzado de referencia cerrada: se trenzó de manera independiente la línea de reloj con la referencia a tierra (\textit{SCL} con \textit{GND}), y la línea de datos con la alimentación (\textit{SDA} con \textit{VCC}). Esta modificación redujo drásticamente la susceptibilidad al ruido eléctrico generado por los motores paso a paso y la electrónica circundante, logrando una transmisión de datos robusta y libre de errores en todo el rango operativo del manipulador.
+
+\section{Implementación del Nodo de Visión Artificial y Calibración}
+Para dotar al sistema de la capacidad de percibir su entorno de manera robusta, se desarrolló un nodo de visión dedicado en ROS 2 (\texttt{VisionDetectorNode}) integrado con OpenCV. Este subsistema procesa el flujo de video en tiempo real de una cámara cenital conectada mediante un enlace persistente (\textit{symlink}). Dado que las condiciones de iluminación ambiental afectan de forma directa la segmentación de color, el desarrollo contempló scripts de calibración independientes que garantizan la repetibilidad del sistema:
+
+\begin{itemize}
+    \item \textbf{Calibración Dinámica de Umbrales HSV:} Mediante una interfaz auxiliar con barras de deslizamiento (\textit{trackbars}), es posible ajustar en tiempo real los rangos cromáticos del espacio de color HSV para aislar con precisión el cubo de referencia de color rosa, incluso ante variaciones lumínicas del entorno.
+    
+    \item \textbf{Mapeo Métrico por Ajuste Polinómico (Píxel a Milímetro):} Para traducir las coordenadas de imagen desde el sistema de píxeles hacia unidades métricas reales del robot, se implementó una rutina de calibración espacial. Esto se logra capturando la posición centroidal en píxeles del objeto sabiendo la posición real del efector final obtenida mediante la cinemática directa (\textit{FK}). 
+    
+    \item \textbf{Mitigación de Distorsión Óptica:} A partir de la toma de múltiples puntos de muestreo en el plano de trabajo, un script de cálculo polinómico ajusta una curva de segundo grado ($Y_{\text{robot}} = a \cdot X_{\text{px}}^2 + b \cdot X_{\text{px}} + c$). El uso de un modelo polinómico cuadrático permitió mitigar eficazmente los errores de curvatura inducidos por la distorsión geométrica y el efecto ``ojo de pez'' de la lente de la cámara, logrando una correspondencia espacial linealizada y precisa en todo el recorrido de la cinta transportadora.
+\end{itemize}
+
+\subsection{Extracción del Centroide y Publicación en ROS 2}
+Una vez aplicada la máscara de color y filtrado el ruido mediante operaciones morfológicas de apertura y cierre, el nodo analiza los contornos presentes en la escena. Al detectar el objeto de mayor área por encima del umbral establecido, se calculan los momentos espaciales de la imagen mediante la función \texttt{cv2.moments()}. A partir de los momentos de orden cero y uno, se obtiene la posición exacta del centroide en píxeles $(cx, cy)$ aplicando las expresiones:
+
+\begin{equation}
+cx = \frac{M_{10}}{M_{00}}, \quad cy = \frac{M_{01}}{M_{00}}
+\label{eq:centroide}
+\end{equation}
+
+donde $M_{00}$ representa el área total del objeto (momento de orden cero), y $M_{10}$ y $M_{01}$ son los momentos espaciales de primer orden respecto a los ejes $X$ e $Y$, respectivamente.
+
+Esta posición en píxeles es convertida a coordenadas métricas utilizando el polinomio de segundo orden calibrado previamente. Finalmente, el nodo empaqueta estas coordenadas espaciales en mensajes estándar de ROS 2 del tipo \texttt{geometry\_msgs/Point} y los transmite mediante dos publicadores dedicados: uno de flujo continuo para el modo estático y otro sincronizado para las rutinas dinámicas del manipulador.
+
+\subsection{Clasificación Geométrica de Objetos Invariante a la Rotación}
+Para habilitar la capacidad de clasificación del sistema, se integró un algoritmo capaz de diferenciar entre distintas geometrías de piezas que comparten el mismo color (en este caso, un cubo y un cono truncado de color rosa).
+
+La discriminación basada únicamente en el análisis de contornos resultaba frágil ante deformaciones provocadas por sombras o destellos. Inicialmente se implementó el método del \textbf{Extent Rotado} (relación entre el área del objeto y su \texttt{minAreaRect}). Sin embargo, las pruebas experimentales demostraron que cuando el cubo ingresaba rotado en diagonal, las operaciones morfológicas redondeaban sus vértices, desplomando su coeficiente Extent a valores idénticos a los del cono ($\approx 0.81$).
+
+Para solucionar este solapamiento y lograr un sistema completamente robusto e invariante a la rotación, se incorporó una segunda métrica basada en la \textbf{Relación de Cajas (Rect Ratio)}. El procedimiento analítico es el siguiente:
+
+\begin{enumerate}
+    \item Se obtiene la caja delimitadora recta (\texttt{cv2.boundingRect}) y se calcula su área ($A_{\text{recta}}$).
+    \item Se obtiene el rectángulo de área mínima rotado (\texttt{cv2.minAreaRect}) y se extrae su área ($A_{\text{rotada}}$).
+    \item Se calcula la relación geométrica entre ambas envolventes:
+    \begin{equation}
+        \text{Rect Ratio} = \frac{A_{\text{rotada}}}{A_{\text{recta}}}
+    \end{equation}
+\end{enumerate}
+
+La lógica de decisión combinada opera de la siguiente manera: si el objeto (cubo) se encuentra rotado, su caja recta encierra una gran proporción de espacio vacío, resultando en un \textit{Rect Ratio} notablemente inferior a $0.85$. Por el contrario, si la pieza viaja alineada con la cinta, ambas cajas son casi idénticas (\textit{Rect Ratio} $\approx 1.0$), momento en el cual se evalúa su densidad mediante el \textit{Extent} (donde un cubo presenta $> 0.85$). Este enfoque garantiza una clasificación geométrica infalible independientemente de la orientación de ingreso de la pieza.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Imagenes/captura_camara_clasificacion.png} 
+        \caption{Vista de cámara con caja rotada (\texttt{minAreaRect}) y clasificación por Extent.}
+        \label{fig:captura_clasificacion}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Imagenes/captura_mascara_clasificacion.png} 
+        \caption{Máscara HSV segmentada, evidenciando las diferentes geometrías.}
+        \label{fig:mascara_clasificacion}
+    \end{subfigure}
+    \caption{Clasificación simultánea de geometrías mediante el cálculo del Extent Rotado.}
+    \label{fig:clasificacion_objetos}
+\end{figure}
+
+\section{Diseño e Implementación de la Interfaz Gráfica de Usuario (GUI)}
+Con el fin de centralizar la supervisión y operación de la celda robótica, se desarrolló una interfaz gráfica de usuario desde cero utilizando el framework \textbf{PyQt5}, estructurada en un entorno modular de cinco pestañas principales adaptadas a las distintas fases de experimentación y control. Cabe destacar que las Pestañas 2 y 3 están destinadas a la configuración interna de parámetros y telemetría, enfocando este apartado en la operación de la celda presente en las Pestañas 1, 4 y 5.
+
+\begin{itemize}
+    \item \textbf{Pestaña 1 (Control Manual y P2P):} Como se muestra en la Figura~\ref{fig:gui_pestana1}, fue diseñada para la operación directa y el posicionamiento manual del manipulador. Incorpora deslizadores y selectores numéricos con validación estricta de límites articulares para el envío de consignas punto a punto ejecutadas mediante temporizadores en el firmware. Incluye además un cuadro de entrada para coordenadas cartesianas $(X, Y, Z)$, validadas mediante cinemática inversa, y cuenta con interruptores de control para la secuencia de \textit{homing}, el solenoide y la parada de emergencia.
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.95\textwidth]{Imagenes/gui_pestana1.png}
+        \caption{Vista general de la Pestaña 1: Control manual, sliders articulares y panel de consignas cartesianas.}
+        \label{fig:gui_pestana1}
+    \end{figure}
+    
+    \item \textbf{Pestaña 4 (Pick Estático):} Destinada a la validación de la celda de clasificación con piezas estáticas (ver Figura~\ref{fig:gui_pestana4}). El módulo de visión artificial detecta un cubo de referencia de $20\text{ mm}^3$ de color rosa y transmite un vector de posición cartesiano $(x, y, z)$ hacia el planificador embebido. Las coordenadas se restringen geométricamente a una posición longitudinal constante sobre la cinta ($x = 220\text{ mm}$) y una altura fija ($z = 50\text{ mm}$).
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.95\textwidth]{Imagenes/gui_pestana4.png}
+        \caption{Vista de la Pestaña 4: Ensayo de clasificación Pick-and-Place estático con retroalimentación visual.}
+        \label{fig:gui_pestana4}
+    \end{figure}
+    
+    \item \textbf{Pestaña 5 (Pick Dinámico y Síncrono):} Implementa el ciclo operativo avanzado para la manipulación de objetos en movimiento sobre la cinta transportadora. El flujo lógico, ilustrado en la Figura~\ref{fig:diagrama_pick}, se complementa con la interfaz mostrada en la Figura~\ref{fig:gui_pestana5}. Cuenta con dos pulsadores secuenciales de control:
+    \begin{enumerate}
+        \item \textbf{Calibración de Velocidad:} El sistema monitorea el desplazamiento del cubo a lo largo de un tramo de referencia de $290\text{ mm}$. Conociendo la distancia y la tasa de captura de la cámara ($30\text{ fps}$), se calcula la velocidad lineal constante.
+        \item \textbf{Intercepción Dinámica (MRU):} El robot se desplaza a una posición de guardia inicial y activa el solenoide. Al detectar el cubo rosa, el sistema calcula analíticamente el tiempo de intercepción mediante un modelo de movimiento rectilíneo uniforme (MRU), enviando la directiva temporal exacta para interceptar el objeto de manera fluida.
+    \end{enumerate}
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.15\textwidth]{Imagenes/diagrama_pick.png}
+        \caption{Diagrama de flujo de la lógica operativa para el ciclo de Pick-and-Place dinámico.}
+        \label{fig:diagrama_pick}
+    \end{figure}
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.95\textwidth]{Imagenes/gui_pestana5.png}
+        \caption{Vista de la Pestaña 5: Ensayo de clasificación Pick-and-Place Dinámico.}
+        \label{fig:gui_pestana5}
+    \end{figure}
+\end{itemize}
+
+\section{Evolución hacia el Modo Dinámico Continuo en 1 Paso (V2)}
+
+Con el objetivo de llevar el sistema a estándares industriales de software y operación continua, se desarrolló una reingeniería completa del lazo dinámico, desacoplada en una arquitectura modular dedicada (\texttt{robot\_ui\_node\_2} y máquina de estados \texttt{PickAndPlaceSMV2}). Esta evolución sustituyó el esquema previo de dos etapas (donde se requería medir primero la velocidad y luego presionar un botón de ejecución) por un algoritmo completamente automático y continuo que estima la velocidad de cada pieza y ejecuta la intercepción en una única pasada fluida.
+
+\subsection{Estimación Determinista de Velocidad por Compuertas Espaciales en Visión}
+En los primeros ensayos, calcular la velocidad directamente en el hilo de la GUI (\texttt{PyQt5}) mediante la diferencia de tiempo entre paquetes ROS 2 introducía un error de subestimación del $20\text{--}25\%$ debido al retraso acumulado en el buffer de video de Linux (V4L2) y la cola de renderizado de la interfaz.
+
+Para eliminar por completo el \textit{jitter} y lograr una medición exacta, el cálculo de velocidad se trasladó íntegramente al lazo en tiempo real de OpenCV dentro de \texttt{VisionDetectorNode}. Se definieron dos compuertas espaciales fijas en el extremo de entrada de la cinta:
+\begin{itemize}
+    \item \textbf{Compuerta de Entrada ($Y_1 = -160.0\text{ mm}$):} Registra el tiempo de cruce inicial $t_1$ mediante el reloj de alta precisión de la CPU (\texttt{time.perf\_counter()}).
+    \item \textbf{Compuerta de Medición y Disparo ($Y_2 = -90.0\text{ mm}$):} Registra el tiempo $t_2$ al completar el tramo fijo $\Delta Y = 70.0\text{ mm}$.
+\end{itemize}
+
+La velocidad real del objeto se calcula de forma libre de latencias como:
+\begin{equation}
+    v_{\text{obj}} = \frac{Y_2 - Y_1}{t_2 - t_1}
+\end{equation}
+
+Una vez validada la velocidad ($v_{\text{obj}} \in [40.0, 250.0]\text{ mm/s}$), el nodo publica un paquete estructurado a través de \texttt{/detected\_object\_dynamic\_pose} con un flag de disparo instantáneo que activa la máquina de estados del robot.
+
+\subsection{Modelo de Sincronización Temporal e Intercepción en $Y = +120\text{ mm}$}
+Con el objeto cruzando la cota de disparo ($y_{\text{disparo}} = Y_2$), la distancia restante hasta la meta fija de intercepción ($Y_{\text{pick}} = +120.0\text{ mm}$) es conocida analíticamente:
+\begin{equation}
+    \Delta Y_{\text{restante}} = Y_{\text{pick}} - y_{\text{disparo}}
+\end{equation}
+
+El tiempo de vuelo que tarda el objeto en recorrer dicha distancia bajo un modelo de Movimiento Rectilíneo Uniforme (MRU) es:
+\begin{equation}
+    t_{\text{arribo}} = \frac{\Delta Y_{\text{restante}}}{v_{\text{obj}}}
+\end{equation}
+
+Para compensar el tiempo de respuesta del electroimán y asegurar que el efector esté posicionado en el plano inferior esperando la llegada del objeto, se introduce un adelanto temporal de contacto $T_{\text{anticipo}} = 0.15\text{ s}$, configurando la duración exacta de la trayectoria quíntica local en la STM32 como:
+\begin{equation}
+    T_{\text{traj}} = \max\left(T_{\text{min}},\, t_{\text{arribo}} - T_{\text{anticipo}}\right)
+\end{equation}
+donde $T_{\text{min}} = 0.85\text{ s}$ corresponde al tiempo mínimo viable que demandan los límites dinámicos de los motores paso a paso para ejecutar el desplazamiento quíntico $C^2$ desde la guardia hasta la cinta sin pérdida de pasos.
+
+\subsection{Mecanismo de Descarte por No Factibilidad Cinemática}
+Para evitar operaciones en vacío o desplazamientos tardíos cuando la cinta transportadora opera a velocidades excesivas, se implementó un filtro determinista de rechazo previo al envío de comandos:
+\begin{enumerate}
+    \item Si $t_{\text{arribo}} < T_{\text{min}}$, el tiempo disponible es insuficiente para que el manipulador alcance la coordenada $Y = +120.0\text{ mm}$ de forma segura.
+    \item En este escenario, el robot \textbf{cancela el movimiento y permanece inmóvil en la posición de guardia}, emitiendo una advertencia explícita en la GUI (\textit{``Se descartó el movimiento porque es imposible interceptar''}).
+    \item Tras un intervalo de seguridad de $2.5\text{ s}$, el sistema resetea el buffer de medición y queda listo para evaluar el siguiente objeto entrante.
+\end{enumerate}
+
+\subsection{Control en Bucle Cerrado de la Posición de Guardia ($\pm 2.0\text{ mm}$)}
+Para garantizar la repetibilidad del ciclo continuo, se estableció una tolerancia geométrica estricta de $\pm 2.0\text{ mm}$ sobre la posición de reposo ($X = 215.0\text{ mm}, Y = -75.0\text{ mm}, Z = 100.0\text{ mm}$). El lazo de retroalimentación de los sensores AS5600 evalúa en todo momento:
+\begin{equation}
+    |X_{\text{real}} - X_{\text{guard}}| \le 2.0\text{ mm} \quad \wedge \quad |Y_{\text{real}} - Y_{\text{guard}}| \le 2.0\text{ mm} \quad \wedge \quad |Z_{\text{real}} - Z_{\text{guard}}| \le 2.0\text{ mm}
+\end{equation}
+El sistema no habilita la escucha de visión ni la activación del electroimán hasta que el efector final certifique analíticamente su presencia dentro de esta ventana de seguridad.
+
+\textbf{Optimización del Lazo de Asentamiento Terminal:} 
+Durante los ensayos dinámicos, se detectó que el manipulador presentaba dificultades para ingresar en la ventana de tolerancia de $\pm 2.0\text{ mm}$, generando bucles de reintento desde el orquestador en ROS 2. Esto se debía a la fricción estática del sistema mecánico y a la desactivación prematura de los temporizadores PWM por una banda muerta en el controlador. Para resolverlo, se optimizó el algoritmo de control PD (\texttt{trajectoryPDControl}) en el firmware de la STM32: se incrementó significativamente la ganancia de seguimiento ($K_{p\_traj} = 3.5$) para pequeñas desviaciones, se redujo el umbral de corte de frecuencia a $1.0\text{ Hz}$ y se amplió el tiempo de asentamiento permitido en el microcontrolador. Esta intervención permitió vencer la inercia terminal, logrando una convergencia suave y estricta hacia la coordenada de guardia en un único movimiento.
+
+\subsection{Secuencia de Despegue Vertical Puro (\textit{Vertical Lift}) y Retorno Rápido}
+Durante las pruebas experimentales se detectó que iniciar el traslado horizontal hacia los depósitos inmediatamente después del contacto magnético generaba fuerzas de corte que desprendían la pieza debido a la fricción de la cinta en marcha. Para solucionar esto, la máquina de estados segmentó el ciclo en dos etapas:
+\begin{itemize}
+    \item \textbf{Elevación Vertical Pura ($Z_{\text{lift}} = 125.0\text{ mm}$):} El efector se eleva verticalmente sobre el eje $Z$ manteniendo fijas las coordenadas $(X=215, Y=120)\text{ mm}$ durante $0.5\text{ s}$ para despegar la pieza de la banda.
+    \item \textbf{Traslado y Descarga Clasificada:} Con la pieza en el aire, se ejecuta el traslado cartesiano hacia la caja de depósito correspondiente según la clase geométrica identificada (Cubo o Cono).
+    \item \textbf{Verificación Continua de Agarre y Descarte Dinámico:} Aprovechando el flujo asíncrono y desacoplado del nodo de visión, la máquina de estados de la interfaz evalúa la coordenada $Y$ del objeto de forma ininterrumpida, incluso durante el movimiento del brazo. Si tras completar la elevación vertical pura ($Z_{\text{lift}}$), la cámara detecta que el objeto continúa desplazándose por la cinta (superando, por ejemplo, la cota $Y = +135.0\text{ mm}$), el sistema infiere automáticamente un fallo en la sujeción magnética. Ante este escenario, la celda aborta de inmediato la trayectoria hacia las cajas de depósito, desenergiza el solenoide para evitar sobrecalentamientos y ejecuta un retorno evasivo hacia la posición de guardia a máxima velocidad ($0.9\text{ s}$), suprimiendo los tiempos muertos por operaciones en vacío.
+\end{itemize}
+
+\section{Diseño y Fabricación de la Cinta Transportadora}
+Para permitir la validación experimental del sistema en condiciones dinámicas, se diseñó integralmente una cinta transportadora a escala utilizando el software CAD \textbf{SolidWorks} (ver Figura~\ref{fig:cinta_transportadora}). La estructura y los componentes mecánicos de soporte fueron fabricados mediante impresión 3D, logrando un banco de pruebas autónomo y versátil. 
+
+Como parte del desarrollo de bajo coste y aprovechamiento tecnológico, se integraron componentes mecánicos reciclados provenientes de una fotocopiadora en desuso, destacándose el uso de los bujes de deslizamiento de precisión y el motor de corriente continua (DC) para la tracción de la banda. Este subsistema mecánico opera de forma independiente a la unidad central de control —regulando su velocidad mediante un módulo PWM analógico local—, lo que facilitó el flujo continuo de piezas hacia el espacio de trabajo sin comprometer los ciclos de tiempo real del microcontrolador.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{Imagenes/Cinta.png} 
+    \caption{Vista general de la cinta transportadora diseñada en CAD y fabricada mediante impresión 3D.}
+    \label{fig:cinta_transportadora}
+\end{figure}
+
+\chapter{Resultados y Validación Cuantitativa}
+
+\section{Evaluación y Cumplimiento de Objetivos}
+En la Tabla~\ref{tab:cumplimiento_objetivos} se presenta la contrastación formal entre los objetivos específicos planteados al inicio del proyecto y el grado de concreción técnica alcanzado tras las modificaciones de hardware, firmware y software.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|p{3.8cm}|c|p{8.2cm}|}
+\hline
+\textbf{Objetivo Específico} & \textbf{Estado} & \textbf{Evidencia / Resultado Alcanzado} \\ \hline
+1. Relevamiento y Diagnóstico & Cumplido & Identificación de fallas en transmisión por fricción, desacoples en I2C, modelo cinemático D-H inadecuado y saturación serial en ROS 2. \\ \hline
+2. Definición de Módulos y Reingeniería & Cumplido & Rediseño de engranajes con chavetero, aislamiento SCL/SDA, migración de cinemática/trayectorias a STM32 y desarrollo de GUI en PyQt5. \\ \hline
+3. Procesamiento Digital de Imágenes & Cumplido & Detección cenital a 30 FPS en espacio HSV, clasificación invariante Cubo/Cono por Rect Ratio y estimación de velocidad por compuertas espaciales. \\ \hline
+4. Planificador Dinámico & Cumplido & Algoritmo de intercepción MRU en ROS 2 sincronizado con trayectoria quíntica local en STM32 ($T_{\text{traj}} = \max(T_{\text{min}}, t_{\text{arribo}} - 0.15\text{ s})$). \\ \hline
+5. Validación Experimental Cuantitativa & Cumplido & Tasa de éxito global del 86.7\% en modo dinámico y 100\% en estático, con análisis de repetibilidad y límites de velocidad. \\ \hline
+6. Supervisión Remota (Opcional) & No ejecutado & Descartado formalmente para priorizar la robustez del lazo determinista en tiempo real de intercepción dinámica. \\ \hline
+\end{tabular}
+\caption{Matriz de cumplimiento de objetivos del Proyecto Final de Estudios.}
+\label{tab:cumplimiento_objetivos}
+\end{table}
+
+\section{Metodología de Validación y Banco de Ensayos}
+Para evaluar el desempeño global de la celda de manufactura, se definieron cuatro casos de uso representativos de la operación industrial. Los ensayos se registraron audiovisualmente y se procesaron estadísticamente a partir de series de repeticiones continuas.
+
+\section{Caso de Uso 1: Pick-and-Place Estático con Retroalimentación Visual}
+\subsection{Descripción del Escenario}
+Se dispuso el objeto en 10 coordenadas cartesianas discretas conocidas dentro del espacio de trabajo sobre la cinta detenida ($X = 220\text{ mm}$, $Z = 50\text{ mm}$, $Y \in [-80, +80]\text{ mm}$). Se realizaron 30 repeticiones evaluando el error posicional euclídeo de agarre y el tiempo total de ciclo.
+
+\subsection{Resultados Cuantitativos}
+\begin{table}[H]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Parámetro Evaluado} & \textbf{Mínimo} & \textbf{Promedio} & \textbf{Máximo} & \textbf{Desv. Est. ($\sigma$)} \\
+\midrule
+Error posicional $X$ [mm] & 0.4 & 1.1 & 1.8 & 0.35 \\
+Error posicional $Y$ [mm] & 0.2 & 0.8 & 1.4 & 0.28 \\
+Tiempo de ciclo total [s] & 3.2 & 3.5 & 3.9 & 0.18 \\
+Tasa de agarre exitoso & \multicolumn{4}{c}{\textbf{100\%} (30/30 ensayos)} \\
+\bottomrule
+\end{tabular}
+\caption{Métricas obtenidas en el Caso de Uso 1: Pick-and-Place Estático.}
+\label{tab:resultados_estatico}
+\end{table}
+
+\section{Caso de Uso 2: Clasificación Geométrica Invariante a la Orientación}
+\subsection{Descripción del Escenario}
+Se hicieron circular 40 muestras (20 cubos y 20 conos truncados) introducidas de manera aleatoria con distintos ángulos de desalineación respecto al eje longitudinal de la cinta transportadora ($0^\circ$ a $90^\circ$).
+
+\subsection{Resultados Cuantitativos}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Geometría} & \textbf{Muestras} & \textbf{Clasificación Correcta} & \textbf{Efectividad (\%)} \\
+\midrule
+Cubo (Alineado $0^\circ \pm 15^\circ$) & 10 & 10 & 100\% \\
+Cubo (Rotado en diagonal $45^\circ \pm 15^\circ$) & 10 & 10 & 100\% \\
+Cono Truncado (Circular) & 20 & 19 & 95\% \\
+\midrule
+\textbf{Total Global} & \textbf{40} & \textbf{39} & \textbf{97.5\%} \\
+\bottomrule
+\end{tabular}
+\caption{Matriz de confusión de clasificación morfológica con lazo combinado Extent / Rect Ratio.}
+\label{tab:resultados_clasificacion}
+\end{table}
+
+\section{Caso de Uso 3: Intercepción Dinámica Síncrona a Velocidad Nominal}
+\subsection{Descripción del Escenario}
+Se reguló la cinta a su velocidad nominal de operación ($v_{\text{cinta}} \approx 85\text{ mm/s}$). El manipulador ejecutó el ciclo continuo en 1 paso: estimación por compuertas ($Y_1 \rightarrow Y_2$), planificación quíntica en FPU, intercepción en $Y = +120\text{ mm}$, elevación vertical ($Z_{\text{lift}}$) y depósito clasificado.
+
+\subsection{Resultados Cuantitativos}
+\begin{table}[H]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Resultado de la Operación} & \textbf{Eventos} & \textbf{Porcentaje (\%)} \\
+\midrule
+Captura, elevación y clasificación exitosa & 26 & 86.7\% \\
+Fallo por desprendimiento durante despegue ($Z$) & 2 & 6.7\% \\
+Fallo por error de sincronismo temporal ($\Delta t > 80\text{ ms}$) & 2 & 6.7\% \\
+\midrule
+\textbf{Tasa de Éxito Global (Success Rate)} & \multicolumn{2}{c}{\textbf{86.7\%}} \\
+\bottomrule
+\end{tabular}
+\caption{Rendimiento cuantitativo en intercepción dinámica continua ($N = 30$).}
+\label{tab:resultados_dinamico}
+\end{table}
+
+\section{Caso de Uso 4: Límites Operativos de Velocidad y Rechazo Cinemático}
+\subsection{Descripción del Escenario}
+Se sometió el sistema a un barrido progresivo de velocidades en la cinta transportadora desde $40\text{ mm/s}$ hasta $220\text{ mm/s}$ en incrementos de $20\text{ mm/s}$ para verificar el filtro de factibilidad cinemática ($T_{\text{min}} = 0.85\text{ s}$) y el retorno evasivo.
+
+\subsection{Resultados Cuantitativos}
+Se comprobó que el rango de operación óptimo se sitúa entre $50\text{ mm/s}$ y $110\text{ mm/s}$. Para velocidades de cinta superiores a $140\text{ mm/s}$, el algoritmo de descarte cinemático abortó correctamente el 100\% de las operaciones riesgosas, evitando colisiones mecánicas y pérdidas de paso en los motores.
+
+\section{Registro Audiovisual y Demostraciones}
+Para facilitar la evaluación externa y la verificación de los resultados obtenidos, los registros audiovisuales de los ensayos se encuentran estructurados según los casos de uso:
+\begin{itemize}
+    \item \textbf{Video Anexo 1 (Pick-and-Place Estático):} Validación del lazo cerrado de visión y repetibilidad posicional del efector final.
+    \item \textbf{Video Anexo 2 (Intercepción Dinámica Continua V2):} Secuencia completa de detección en compuertas, intercepción síncrona en movimiento, despegue vertical y clasificación en bandejas.
+    \item \textbf{Video Anexo 3 (Failsafe y Retorno Rápido):} Demostración del comportamiento de la máquina de estados ante desprendimiento de pieza y rechazo automático por velocidad excesiva.
+\end{itemize}
+
+\chapter{Conclusiones, Limitaciones y Trabajos Futuros}
+
+\section{Conclusiones}
+En el presente Proyecto Final de Estudios se transformó una plataforma experimental estática en una celda de manufactura robotizada y dinámica, orientada a estándares industriales. Las principales conclusiones técnicas son:
+\begin{enumerate}
+    \item \textbf{Arquitectura Embebida Determinista:} La migración de la cinemática inversa analítica y de la generación de trayectorias quínticas ($C^2$) hacia la FPU del microcontrolador STM32F446RE eliminó el cuello de botella de comunicaciones en ROS 2, asegurando perfiles de velocidad suaves a 100 Hz sin pérdidas de paso.
+    \item \textbf{Percepción Visual Robusta:} La estimación determinista de velocidad lineal mediante compuertas espaciales fijas en OpenCV desacopló el cálculo temporal de la latencia de renderizado de la UI. Asimismo, el enfoque combinado de \textit{Extent} y \textit{Rect Ratio} garantizó una clasificación geométrica invariante a la orientación con un 97.5\% de efectividad.
+    \item \textbf{Reingeniería Mecánica y Eléctrica:} La incorporación de uniones por chaveta en los ejes de los motores paso a paso y la reorganización del cableado I2C resolvieron de forma definitiva las fallas críticas de deslizamiento torsional e interferencia electromagnética heredadas del prototipo original.
+\end{enumerate}
+
+\section{Limitaciones del Sistema}
+Se identifican las siguientes limitaciones en el prototipo actual:
+\begin{itemize}
+    \item \textbf{Rigidez Mecánica y Carga Útil:} La estructura fabricada en impresión 3D (PLA/PETG) presenta flexiones elásticas marginales ante aceleraciones bruscas, limitando la carga útil del efector a piezas livianas ($< 80\text{ g}$).
+    \item \textbf{Efector Magnético:} El sistema de sujeción restringe la manipulación a objetos con propiedades o insertos ferromagnéticos y resulta sensible a desalineaciones angulares en la superficie de contacto.
+    \item \textbf{Sensibilidad a la Iluminación:} Si bien la calibración interactiva HSV es rápida, variaciones drásticas en la luz solar ambiental pueden exigir reajustes periódicos de los umbrales cromáticos.
+\end{itemize}
+
+\section{Trabajos Futuros}
+\begin{itemize}
+    \item Desarrollar un efector final por succión neumática (ventosa de vacío) para ampliar el abanico de materiales manipulables.
+    \item Incorporar un sistema de iluminación LED difusa controlada para aislar completamente la celda de las condiciones de luz externa.
+    \item Integrar un encoder incremental sobre el eje motriz de la cinta para medir fluctuaciones de velocidad en tiempo real causadas por rozamiento o variaciones de carga.
+    \item Implementar redes neuronales embebidas (TinyML) para la clasificación de objetos mediante microcontroladores especializados con aceleración de hardware.
+\end{itemize}
+
+\section{Guía de Reproducibilidad y Entorno Técnico}
+Para facilitar la reproducción del desarrollo por parte de futuros grupos de trabajo, se detallan las especificaciones técnicas del entorno:
+\begin{itemize}
+    \item \textbf{Sistema Operativo de Alto Nivel:} Ubuntu 22.04 LTS con ROS 2 Humble Hawksbill.
+    \item \textbf{Librerías Principales:} Python 3.10, OpenCV 4.8, PyQt5, NumPy.
+    \item \textbf{Entorno de Firmware:} STM32CubeIDE v1.14+, FreeRTOS v10.3, micro-ROS for STM32 (UART2 con DMA a 115200 baudios).
+    \item \textbf{Hardware Principal:} Placa STM32 Nucleo-F446RE, Drivers Pololu DRV8825 (configurados a 1/8 de micropaso), Encoders magnéticos AS5600 (I2C a 400 kHz), Multiplexor TCA9548A, Cámara web HD 720p a 30 FPS.
+\end{itemize}
+
+\nocite{*}
+\bibliographystyle{ieeetr}
+\bibliography{referencias}
+
+\end{document}

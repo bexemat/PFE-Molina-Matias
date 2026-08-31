@@ -1,0 +1,30 @@
+# VS Code
+**/.vscode/
+*.vc.db
+*.db
+
+# ROS 2 Build / Logs
+**/build/
+**/install/
+**/log/
+
+# Python
+**/__pycache__/
+*.pyc
+
+# STM32 / Embedded
+**/Debug/
+**/Release/
+*.o
+*.su
+
+# LaTeX Aux
+Informe/*.aux
+Informe/*.log
+Informe/*.out
+Informe/*.toc
+Informe/*.bbl
+Informe/*.blg
+Informe/*.fls
+Informe/*.fdb_latexmk
+Informe/*.synctex.gz
