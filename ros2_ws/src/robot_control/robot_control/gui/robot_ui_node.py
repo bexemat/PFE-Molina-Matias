@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+# Archivo: robot_control/gui/robot_ui_node.py
 import sys
 import time
+import math
 import collections
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -14,7 +16,7 @@ from robot_control.gui.widgets.mpl_canvas_yz import MplCanvas2D_YZ
 from robot_control.gui.tabs.dynamic_tab import DynamicTab
 from robot_control.gui.ros_thread import ROS2Thread
 
-# --- IMPORTAMOS LA NUEVA MÁQUINA DE ESTADOS MODULARIZADA ---
+# --- IMPORTAMOS LA MÁQUINA DE ESTADOS MODULARIZADA ---
 from robot_control.gui.pick_and_place_sm import PickAndPlaceSM
 
 
@@ -30,6 +32,15 @@ class MainWindow(QMainWindow):
         self.q_real = [0.0, 90.0, 0.0]
         self.pos_xyz = [170.0, 0.0, 170.0]
         self.q_target = [0.0, 90.0, 0.0]
+
+        # --- VARIABLES DE PICK AND PLACE ESTÁTICO (PESTAÑA 4) ---
+        self.static_step = 0
+        self.static_obj_class = 1
+        self.static_place_x = 115.0
+        self.static_place_y = 115.0
+        self.static_place_z = 42.0
+        self.static_guard_xyz = [215.0, -75.0, 120.0]  # Posición de guardia calibrada (Z=120)
+        self.DESIRED_CART_VEL = 100.0                   # Velocidad cartesiana a 100 mm/s
 
         # Historiales para los gráficos
         self.max_points = 100
@@ -69,15 +80,27 @@ class MainWindow(QMainWindow):
         
         self.init_ui()
 
-        # --- INSTANCIAMOS LA MÁQUINA DE ESTADOS MODULARIZADA ---
+        # Instanciamos la máquina de estados dinámica
         self.sm = PickAndPlaceSM(self.ros_thread, self.tab_dynamic)
 
     # =================================================================
-    # COMUNICACIÓN CON LA MÁQUINA DE ESTADOS (PickAndPlaceSM)
+    # UTILIDADES DE CÁLCULO DE VELOCIDAD CARTESIANA
     # =================================================================
-    
+    def calc_duration_100mms(self, p_start, p_end, min_dur=0.6):
+        """Calcula el tiempo necesario para recorrer la distancia euclidiana a 100 mm/s."""
+        dist = math.sqrt(
+            (p_end[0] - p_start[0])**2 + 
+            (p_end[1] - p_start[1])**2 + 
+            (p_end[2] - p_start[2])**2
+        )
+        return max(min_dur, dist / self.DESIRED_CART_VEL)
+
+    # =================================================================
+    # COMUNICACIÓN CON ROS Y VISIÓN
+    # =================================================================
     def on_vision_class_received(self, clase: int):
         self.sm.set_object_class(clase)
+        self.static_obj_class = clase
 
     def on_vision_target_received(self, target_xyz):
         self.vision_target = target_xyz
@@ -100,14 +123,120 @@ class MainWindow(QMainWindow):
         if tracking:
             self.is_tracking_yz = True
 
+    # =================================================================
+    # PICK AND PLACE ESTÁTICO (PESTAÑA 4) A 100 mm/s
+    # =================================================================
+    def execute_vision_trajectory(self):
+        """Inicia la rutina estática activando el electroimán y yendo hacia la pieza."""
+        if self.estop_active: return
+        
+        # 1. Encender electroimán previo al pick
+        self.magnet_active = True
+        self.ros_thread.send_magnet(True)
+        self.btn_magnet.setText("🧲 ELECTROIMÁN: ENCENDIDO")
+
+        # 2. Configuración de la caja de destino según la clase
+        if self.static_obj_class == 1:
+            self.static_place_x = 115.0
+            self.static_place_y = 115.0
+            self.static_place_z = 42.0
+        else:
+            self.static_place_x = 120.0
+            self.static_place_y = -120.0
+            self.static_place_z = 42.0
+
+        self.vision_start_y = self.pos_xyz[1]
+        self.vision_start_z = self.pos_xyz[2]
+        self.vision_target_y = self.vision_target[1]
+        self.vision_target_z = self.vision_target[2]
+        self.yz_trace_y = []
+        self.yz_trace_z = []
+        self.is_tracking_yz = True
+
+        # Paso 1: Bajar hacia el objeto detectado
+        self.static_step = 1
+        dur = self.calc_duration_100mms(self.pos_xyz, self.vision_target)
+        self.lbl_v_status.setText(f"Estado: 🎯 PICK hacia objeto (T={dur:.2f}s)")
+        self.lbl_v_status.setStyleSheet("background-color: #8e44ad; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
+        self.ros_thread.send_ctraj_cmd(self.vision_target[0], self.vision_target[1], self.vision_target[2], duration=dur)
+
     def on_planner_status_received(self, code: int):
-        # Delegamos la lógica al archivo separado
-        self.sm.process_planner_status(code, self)
+        # 1. Atender la máquina de estados dinámica si está activa
+        if self.sm.auto_step > 0:
+            self.sm.process_planner_status(code, self)
+            return
+
+        # 2. Atender la máquina de estados estática (Pestaña 4)
+        if code == 1:
+            self.lbl_planner_state.setText("Estado: ⏳ TRAYECTORIA EN EJECUCIÓN...")
+        elif code == 2:
+            self.lbl_planner_state.setText("Estado: ✅ COMPLETADO")
+
+            if self.static_step == 1:
+                # Paso 2: Elevación vertical pura de seguridad (Z=125 mm)
+                self.static_step = 2
+                target_lift = [self.vision_target[0], self.vision_target[1], 125.0]
+                dur = self.calc_duration_100mms(self.pos_xyz, target_lift, min_dur=0.5)
+                self.lbl_v_status.setText("Estado: ⬆️ Elevando pieza (Lift)...")
+                self.lbl_v_status.setStyleSheet("background-color: #2980b9; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
+                self.ros_thread.send_ctraj_cmd(target_lift[0], target_lift[1], target_lift[2], duration=dur)
+
+            elif self.static_step == 2:
+                # Paso 3: Traslado elevado a la caja de clasificación (Z=110 mm)
+                self.static_step = 3
+                target_box_high = [self.static_place_x, self.static_place_y, 110.0]
+                dur = self.calc_duration_100mms(self.pos_xyz, target_box_high)
+                clase_str = "Cubo" if self.static_obj_class == 1 else "Cono"
+                self.lbl_v_status.setText(f"Estado: 🚀 PLACE ({clase_str}) hacia X={self.static_place_x}, Y={self.static_place_y}...")
+                self.lbl_v_status.setStyleSheet("background-color: #3498db; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
+                self.ros_thread.send_ctraj_cmd(target_box_high[0], target_box_high[1], target_box_high[2], duration=dur)
+
+            elif self.static_step == 3:
+                # Paso 4: Descenso final en la caja (Z=42 mm)
+                self.static_step = 4
+                target_box_low = [self.static_place_x, self.static_place_y, self.static_place_z]
+                dur = self.calc_duration_100mms(self.pos_xyz, target_box_low, min_dur=0.6)
+                self.lbl_v_status.setText(f"Estado: ⬇️ Descendiendo a Z={self.static_place_z} mm...")
+                self.ros_thread.send_ctraj_cmd(target_box_low[0], target_box_low[1], target_box_low[2], duration=dur)
+
+            elif self.static_step == 4:
+                # Paso 5: Apagar electroimán y regresar a guardia
+                self.static_step = 5
+                self.magnet_active = False
+                self.ros_thread.send_magnet(False)
+                self.btn_magnet.setText("🧲 ELECTROIMÁN: APAGADO")
+
+                dur = self.calc_duration_100mms(self.pos_xyz, self.static_guard_xyz)
+                self.lbl_v_status.setText("Estado: 🔓 Pieza depositada. Retornando a guardia...")
+                self.lbl_v_status.setStyleSheet("background-color: #27ae60; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
+                self.ros_thread.send_ctraj_cmd(self.static_guard_xyz[0], self.static_guard_xyz[1], self.static_guard_xyz[2], duration=dur)
+
+            elif self.static_step == 5:
+                # Finalizado
+                self.static_step = 0
+                self.is_tracking_yz = False
+
+                # --- REINICIO DEL GRÁFICO Y-Z ---
+                self.vision_start_y = None
+                self.vision_start_z = None
+                self.vision_target_y = None
+                self.vision_target_z = None
+                self.yz_trace_y = []
+                self.yz_trace_z = []
+                self.canvas_yz.axes.cla()
+                self.canvas_yz.axes.set_xlabel("Coordenada Y [mm]")
+                self.canvas_yz.axes.set_ylabel("Coordenada Z [mm]")
+                self.canvas_yz.axes.set_title("Gráfico Y-Z")
+                self.canvas_yz.axes.grid(True)
+                self.canvas_yz.draw()
+                # -------------------------------
+
+                self.lbl_v_status.setText("Estado Actual: ✅ CICLO COMPLETADO")
+                self.lbl_v_status.setStyleSheet("background-color: #ecf0f1; color: #2c3e50; padding: 12px; border-radius: 5px; font-weight: bold;")
 
     # =================================================================
     # CONSTRUCCIÓN DE LA INTERFAZ GRÁFICA
     # =================================================================
-
     def init_ui(self):
         self.setWindowTitle("Control y Monitoreo - EEZYbotARM MK2 (STM32 Embedded)")
         self.resize(750, 1020)
@@ -185,7 +314,6 @@ class MainWindow(QMainWindow):
         grid_sliders.addWidget(self.slider_q1, 0, 1)
         grid_sliders.addWidget(self.spin_q1, 0, 2)
 
-        # LÍMITES AJUSTADOS (Q2 de 40 a 157 para permitir IK en Z bajas)
         grid_sliders.addWidget(QLabel("Q2 [40° a 157°]:"), 1, 0)
         self.slider_q2 = QSlider(Qt.Horizontal)
         self.slider_q2.setRange(40, 157)
@@ -419,9 +547,8 @@ class MainWindow(QMainWindow):
         layout.addLayout(vbox_controls, 1, 1)
 
     # =================================================================
-    # FUNCIONES GENERALES DE INTERFAZ Y ACCIONES P2P
+    # ACCIONES P2P, MANUALES Y GRÁFICAS
     # =================================================================
-
     def on_vision_image_received(self, q_img: QImage):
         pixmap = QPixmap.fromImage(q_img)
         self.lbl_camera.setPixmap(pixmap.scaled(self.lbl_camera.size(), Qt.KeepAspectRatio))
@@ -437,17 +564,6 @@ class MainWindow(QMainWindow):
         self.tab_dynamic.lbl_dyn_status.setStyleSheet(
             "background-color: #f39c12; color: white; padding: 10px; border-radius: 5px;"
         )
-
-    def execute_vision_trajectory(self):
-        if self.estop_active: return
-        self.vision_start_y = self.pos_xyz[1]
-        self.vision_start_z = self.pos_xyz[2]
-        self.vision_target_y = self.vision_target[1]
-        self.vision_target_z = self.vision_target[2]
-        self.yz_trace_y = []
-        self.yz_trace_z = []
-        self.is_tracking_yz = True
-        self.ros_thread.send_ctraj_cmd(self.vision_target[0], self.vision_target[1], self.vision_target[2], duration=1.5)
 
     def send_joint_cmd(self):
         if self.estop_active: return
@@ -478,8 +594,12 @@ class MainWindow(QMainWindow):
         self.estop_active = not self.estop_active
         self.ros_thread.send_estop(self.estop_active)
         
-        # Notificamos a la máquina de estados externa
+        # Notificamos a la máquina de estados dinámica
         self.sm.set_estop(self.estop_active)
+        
+        if self.estop_active:
+            self.static_step = 0
+            self.is_tracking_yz = False
         
         # Actualizamos etiquetas en todas las pestañas
         btn_text = "🛑 E-STOP ACTIVADO" if self.estop_active else "🛑 PARADA DE EMERGENCIA (INACTIVA)"
@@ -487,13 +607,11 @@ class MainWindow(QMainWindow):
         self.btn_estop_planner.setText(btn_text)
         self.btn_v_estop.setText("E-STOP ACTIVADO" if self.estop_active else "Boton de Parada")
         self.tab_dynamic.btn_dyn_estop.setText(self.btn_v_estop.text())
-        
-        if self.estop_active:
-            self.is_tracking_yz = False
 
     def on_feedback_received(self, q_real: list, pos_xyz: list):
         self.q_real = q_real
         self.pos_xyz = pos_xyz
+        self.sm.set_robot_pos(pos_xyz)
 
         self.lbl_q1_real.setText(f"Q1: {q_real[0]:.2f}°")
         self.lbl_q2_real.setText(f"Q2: {q_real[1]:.2f}°")

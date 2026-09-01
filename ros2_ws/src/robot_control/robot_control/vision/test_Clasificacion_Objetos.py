@@ -28,7 +28,7 @@ def main():
     cap.set(cv2.CAP_PROP_FPS, 30)
 
     # Valores HSV optimizados
-    lower_hsv = np.array([136, 64, 219])
+    lower_hsv = np.array([131, 120, 160])
     upper_hsv = np.array([179, 255, 255])
 
     # Kernels morfológicos

@@ -196,7 +196,7 @@ La delegación de la planificación de trayectorias al nivel embebido requirió 
     \includegraphics[width=0.45\textwidth]{Imagenes/FirmwareDetalle2.png}
     \caption{Diagrama de bloques Firmware Detalle 2: mControlTask y Planificador Quíntico.}
     \label{fig:diagrama_firmware_detalle2}
-\end{figure}
+    \end{figure}
 
 \begin{figure}[H]
     \centering
@@ -258,7 +258,7 @@ El nivel superior opera en la computadora principal y concentra el procesamiento
 El módulo de visión procesa el flujo de la cámara cenital a una frecuencia constante de 30 fotogramas por segundo (actualización cada $33.3\text{ ms}$). Para aislar el cálculo de velocidad de las latencias inherentes del renderizado de la interfaz y el buffer de video, se establecieron dos compuertas espaciales de medición fijas en la entrada de la cinta ($Y_1 = -160.0\text{ mm}$ y $Y_2 = -90.0\text{ mm}$). Este tramo fijo de $70.0\text{ mm}$ garantiza un diferencial de tiempo determinista, permitiendo calcular la velocidad lineal del objeto con alta precisión. Adicionalmente, la clasificación geométrica del objeto se bloquea mediante un "cerrojo espacial" (\textit{latch}) únicamente cuando la pieza transita por el centro óptico de la cámara ($-20.0\text{ mm} \le Y \le 20.0\text{ mm}$). Esta decisión de diseño minimiza la distorsión geométrica periférica y previene falsas clasificaciones causadas por la oclusión temporal del brazo robótico durante la fase de intercepción.
 
 \textbf{Sincronización Dinámica y Filtro de Factibilidad:}
-Una vez validada la velocidad del objeto (dentro del rango operativo estipulado), el sistema calcula analíticamente el tiempo de vuelo hacia la cota fija de intercepción ($Y_{\text{pick}} = +120.0\text{ mm}$) basándose en un modelo de Movimiento Rectilíneo Uniforme (MRU). Al tiempo resultante se le resta un factor de anticipación $T_{\text{anticipo}} = 0.15\text{ s}$. Este parámetro crítico compensa el retardo de magnetización plena del solenoide y la inercia de asentamiento de la estructura plástica, garantizando que el efector espere al objeto totalmente inmóvil y energizado fracciones de segundo antes del contacto. Como medida de seguridad térmica y mecánica, si la velocidad de la cinta exige un tiempo de intercepción inferior a $T_{\text{min}} = 0.85\text{ s}$ (límite físico de aceleración de los motores paso a paso para no perder sincronismo), la máquina de estados emite un aborto cinemático. El manipulador descarta la operación y permanece en guardia, previniendo movimientos erráticos frente a velocidades excesivas de la banda transportadora.
+Una vez validada la velocidad del objeto (dentro del rango operativo estipulado), el sistema calcula analíticamente el tiempo de vuelo hacia la cota de intercepción $Y_{\text{pick}}$ basándose en un modelo de Movimiento Rectilíneo Uniforme (MRU). Al tiempo resultante se le resta un factor de anticipación $T_{\text{anticipo}} = 0.15\text{ s}$. Este parámetro crítico compensa el retardo de magnetización plena del solenoide y la inercia de asentamiento de la estructura plástica, garantizando que el efector espere al objeto totalmente inmóvil y energizado fracciones de segundo antes del contacto. Como medida de seguridad térmica y mecánica, si la velocidad de la cinta exige un tiempo de intercepción inferior a $T_{\text{min}} = 0.85\text{ s}$ (límite físico de aceleración de los motores paso a paso para no perder sincronismo), la máquina de estados emite un aborto cinemático. El manipulador descarta la operación y permanece en guardia, previniendo movimientos erráticos frente a velocidades excesivas de la banda transportadora.
 
 \textbf{Telemetría en Lazo Cerrado y Recuperación de Fallos:}
 El ciclo continuo se rige por un estricto monitoreo de estados que otorga robustez industrial a la celda:
@@ -272,7 +272,7 @@ El ciclo continuo se rige por un estricto monitoreo de estados que otorga robust
 \begin{itemize}
     \item \textbf{Bloques Principales (Figura~\ref{fig:diagrama_supervisor}):} Representa el lazo de supervisión en la computadora principal. El nodo de visión procesa las capturas a 30 FPS y envía la cinemática del objeto al hilo secundario \texttt{ROS2Thread}. Este hilo comunica mediante señales seguras de Qt (\texttt{pyqtSignal}) a la interfaz \texttt{MainWindowV2}, la cual delega la toma de decisiones dinámicas a la máquina de estados \texttt{PickAndPlaceSMV2}.
     \item \textbf{Detalle 1 (Figura~\ref{fig:diagrama_supervisor_detalle1}):} Describe la segmentación en espacio de color HSV y el cálculo de momentos espaciales. La velocidad lineal se obtiene de forma determinista midiendo el tiempo de vuelo entre dos compuertas virtuales fijas ($Y_1 = -160.0\text{ mm}$ y $Y_2 = -90.0\text{ mm}$). Asimismo, se implementa un cerrojo óptico (\textit{latch}) en el centro del lente para fijar la clasificación geométrica (Cubo/Cono) mediante las relaciones \textit{Extent} y \textit{Rect Ratio}.
-    \item \textbf{Detalle 2 (Figura~\ref{fig:diagrama_supervisor_detalle2}):} Detalla las transiciones del ciclo continuo: validación de posición de guardia ($\pm 2.0\text{ mm}$), activación del electroimán, cálculo de intercepción MRU hacia $Y = +120.0\text{ mm}$, elevación vertical pura ($Z = 125.0\text{ mm}$ para evitar corte por fricción) y verificación óptica continua de agarre con retorno evasivo rápido ante pérdidas de pieza.
+    \item \textbf{Detalle 2 (Figura~\ref{fig:diagrama_supervisor_detalle2}):} Detalla las transiciones del ciclo continuo: validación de posición de guardia ($\pm 2.0\text{ mm}$), activación del electroimán, cálculo de intercepción MRU, elevación vertical pura ($Z = 125.0\text{ mm}$ para evitar corte por fricción) y verificación óptica continua de agarre con retorno evasivo rápido ante pérdidas de pieza.
     \item \textbf{Detalle 3 (Figura~\ref{fig:diagrama_supervisor_detalle3}):} Muestra el desacoplo entre el middleware de comunicaciones y el hilo de renderizado gráfico de PyQt5, garantizando que el refresco visual no introduzca retardos en la recepción de la telemetría embebida.
 \end{itemize}
 
@@ -321,7 +321,7 @@ Bloqueo Óptico & $[-20, +20]$ mm & \texttt{sm\_v2.py} & Fijación de clase en c
 \hline
 Extent / Rect Ratio & $\ge 0.85$ & \texttt{vision\_node.py} & Discriminación invariante a la orientación. \\
 \hline
-Meta Intercepción & $Y = +120.0$ mm & \texttt{sm\_v2.py} & Posición predecible en espacio de trabajo. \\
+Meta Intercepción & $Y_{\text{pick}}$ variable / adaptable & \texttt{sm\_v2.py} & Posición predecible en espacio de trabajo. \\
 \hline
 \texttt{T\_MIN\_ROBOT} & 0.85 s & \texttt{sm\_v2.py} & Filtro de descarte por velocidad excesiva de cinta. \\
 \hline
@@ -712,8 +712,8 @@ La velocidad real del objeto se calcula de forma libre de latencias como:
 
 Una vez validada la velocidad ($v_{\text{obj}} \in [40.0, 250.0]\text{ mm/s}$), el nodo publica un paquete estructurado a través de \texttt{/detected\_object\_dynamic\_pose} con un flag de disparo instantáneo que activa la máquina de estados del robot.
 
-\subsection{Modelo de Sincronización Temporal e Intercepción en $Y = +120\text{ mm}$}
-Con el objeto cruzando la cota de disparo ($y_{\text{disparo}} = Y_2$), la distancia restante hasta la meta fija de intercepción ($Y_{\text{pick}} = +120.0\text{ mm}$) es conocida analíticamente:
+\subsection{Modelo de Sincronización Temporal e Intercepción en $Y_{\text{pick}}$}
+Con el objeto cruzando la cota de disparo ($y_{\text{disparo}} = Y_2$), la distancia restante hasta la meta de intercepción $Y_{\text{pick}}$ es conocida analíticamente:
 \begin{equation}
     \Delta Y_{\text{restante}} = Y_{\text{pick}} - y_{\text{disparo}}
 \end{equation}
@@ -732,7 +732,7 @@ donde $T_{\text{min}} = 0.85\text{ s}$ corresponde al tiempo mínimo viable que 
 \subsection{Mecanismo de Descarte por No Factibilidad Cinemática}
 Para evitar operaciones en vacío o desplazamientos tardíos cuando la cinta transportadora opera a velocidades excesivas, se implementó un filtro determinista de rechazo previo al envío de comandos:
 \begin{enumerate}
-    \item Si $t_{\text{arribo}} < T_{\text{min}}$, el tiempo disponible es insuficiente para que el manipulador alcance la coordenada $Y = +120.0\text{ mm}$ de forma segura.
+    \item Si $t_{\text{arribo}} < T_{\text{min}}$, el tiempo disponible es insuficiente para que el manipulador alcance la coordenada de intercepción de forma segura.
     \item En este escenario, el robot \textbf{cancela el movimiento y permanece inmóvil en la posición de guardia}, emitiendo una advertencia explícita en la GUI (\textit{``Se descartó el movimiento porque es imposible interceptar''}).
     \item Tras un intervalo de seguridad de $2.5\text{ s}$, el sistema resetea el buffer de medición y queda listo para evaluar el siguiente objeto entrante.
 \end{enumerate}
@@ -780,9 +780,9 @@ En la Tabla~\ref{tab:cumplimiento_objetivos} se presenta la contrastación forma
 \textbf{Objetivo Específico} & \textbf{Estado} & \textbf{Evidencia / Resultado Alcanzado} \\ \hline
 1. Relevamiento y Diagnóstico & Cumplido & Identificación de fallas en transmisión por fricción, desacoples en I2C, modelo cinemático D-H inadecuado y saturación serial en ROS 2. \\ \hline
 2. Definición de Módulos y Reingeniería & Cumplido & Rediseño de engranajes con chavetero, aislamiento SCL/SDA, migración de cinemática/trayectorias a STM32 y desarrollo de GUI en PyQt5. \\ \hline
-3. Procesamiento Digital de Imágenes & Cumplido & Detección cenital a 30 FPS en espacio HSV, clasificación invariante Cubo/Cono por Rect Ratio y estimación de velocidad por compuertas espaciales. \\ \hline
+3. Procesamiento Digital de Imágenes & Cumplido & Detección cenital a 30 FPS en espacio HSV, clasificación invariante Cubo/Cono por Rect Ratio (87.2\% de efectividad) y estimación de velocidad por compuertas espaciales. \\ \hline
 4. Planificador Dinámico & Cumplido & Algoritmo de intercepción MRU en ROS 2 sincronizado con trayectoria quíntica local en STM32 ($T_{\text{traj}} = \max(T_{\text{min}}, t_{\text{arribo}} - 0.15\text{ s})$). \\ \hline
-5. Validación Experimental Cuantitativa & Cumplido & Tasa de éxito global del 86.7\% en modo dinámico y 100\% en estático, con análisis de repetibilidad y límites de velocidad. \\ \hline
+5. Validación Experimental Cuantitativa & Cumplido & Tasa de éxito global del 80.0\% (32/40) en modo dinámico continuo y 100\% en estático, con análisis de repetibilidad y límites de velocidad. \\ \hline
 6. Supervisión Remota (Opcional) & No ejecutado & Descartado formalmente para priorizar la robustez del lazo determinista en tiempo real de intercepción dinámica. \\ \hline
 \end{tabular}
 \caption{Matriz de cumplimiento de objetivos del Proyecto Final de Estudios.}
@@ -790,86 +790,144 @@ En la Tabla~\ref{tab:cumplimiento_objetivos} se presenta la contrastación forma
 \end{table}
 
 \section{Metodología de Validación y Banco de Ensayos}
-Para evaluar el desempeño global de la celda de manufactura, se definieron cuatro casos de uso representativos de la operación industrial. Los ensayos se registraron audiovisualmente y se procesaron estadísticamente a partir de series de repeticiones continuas.
+Para evaluar el desempeño global de la celda de manufactura, se definieron los casos de uso representativos de la operación industrial. Los ensayos se registraron audiovisualmente y se procesaron estadísticamente a partir de series de repeticiones continuas.
 
 \section{Caso de Uso 1: Pick-and-Place Estático con Retroalimentación Visual}
 \subsection{Descripción del Escenario}
-Se dispuso el objeto en 10 coordenadas cartesianas discretas conocidas dentro del espacio de trabajo sobre la cinta detenida ($X = 220\text{ mm}$, $Z = 50\text{ mm}$, $Y \in [-80, +80]\text{ mm}$). Se realizaron 30 repeticiones evaluando el error posicional euclídeo de agarre y el tiempo total de ciclo.
+Se dispuso el objeto en coordenadas cartesianas alternadas conocidas dentro del espacio de trabajo sobre la cinta detenida ($X = 220\text{ mm}$, $Z = 78\text{ mm}$, $Y \in [+10, +140]\text{ mm}$). Se realizaron 30 repeticiones evaluando el error posicional euclídeo de agarre y el tiempo total de ciclo.
 
-\subsection{Resultados Cuantitativos}
+\subsection{Resultados Cuantitativos y Registro Experimental}
+En la Tabla~\ref{tab:registro_estatico_manual} se detalla el registro empírico de las corridas experimentales correspondientes a la evaluación estática con retroalimentación visual ($N = 23$), consignando la coordenada longitudinal objetivo ($Y_{\text{pick}}$), el éxito en la fase de agarre (\textit{Pick}), la fase de depósito (\textit{Place}) y la clasificación morfológica obtenida.
+
 \begin{table}[H]
 \centering
-\begin{tabular}{lcccc}
-\toprule
-\textbf{Parámetro Evaluado} & \textbf{Mínimo} & \textbf{Promedio} & \textbf{Máximo} & \textbf{Desv. Est. ($\sigma$)} \\
-\midrule
-Error posicional $X$ [mm] & 0.4 & 1.1 & 1.8 & 0.35 \\
-Error posicional $Y$ [mm] & 0.2 & 0.8 & 1.4 & 0.28 \\
-Tiempo de ciclo total [s] & 3.2 & 3.5 & 3.9 & 0.18 \\
-Tasa de agarre exitoso & \multicolumn{4}{c}{\textbf{100\%} (30/30 ensayos)} \\
-\bottomrule
+\small
+\begin{tabular}{|c|c|c|c|l|}
+\hline
+\textbf{Nº} & \textbf{$Y_{\text{pick}}$ [mm]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} \\ \hline
+1  & 39    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+2  & 12,9  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+3  & 92,2  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+4  & 80    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+5  & 140   & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+6  & 52,3  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+7  & 118,5 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+8  & 13,2  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+9  & 116,7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+10 & 73    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+11 & 31    & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+12 & 113   & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+13 & 12,3  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+14 & 91,5  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+15 & 22,3  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+16 & 118,7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+17 & 144   & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+18 & 10    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+19 & 23,7  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+20 & 72,5  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+21 & 75,2  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+22 & 129,3 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+23 & 132,7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
 \end{tabular}
-\caption{Métricas obtenidas en el Caso de Uso 1: Pick-and-Place Estático.}
-\label{tab:resultados_estatico}
+\caption{Registro experimental detallado de los ensayos de Pick-and-Place estático ($N = 23$).}
+\label{tab:registro_estatico_manual}
 \end{table}
 
-\section{Caso de Uso 2: Clasificación Geométrica Invariante a la Orientación}
-\subsection{Descripción del Escenario}
-Se hicieron circular 40 muestras (20 cubos y 20 conos truncados) introducidas de manera aleatoria con distintos ángulos de desalineación respecto al eje longitudinal de la cinta transportadora ($0^\circ$ a $90^\circ$).
+\section{Caso de Uso 2: Intercepción Dinámica Síncrona a Velocidad Nominal}
+\subsection{Descripción del Escenario y Registro Experimental}
+Se realizaron un total de 43 ensayos continuos sobre la cinta transportadora en movimiento continuo, evaluando la sincronización temporal ($Y_{\text{pick}} = +120\text{ mm}$ con $T_{\text{anticipo}} = 0.15\text{ s}$), la toma mediante electroimán (\textit{Pick}), la elevación vertical pura ($Z_{\text{lift}}$) y el traslado/descarga en las cajas correspondientes según la geometría detectada (\textit{Place}).
 
-\subsection{Resultados Cuantitativos}
+En la Tabla~\ref{tab:registro_dinamico_completo} se detalla el registro empírico de todas las corridas experimentales, incluyendo la velocidad lineal medida ($V$), el resultado de las etapas de manipulación, la clasificación morfológica y las observaciones de campo.
+
 \begin{table}[H]
 \centering
-\begin{tabular}{lccc}
-\toprule
-\textbf{Geometría} & \textbf{Muestras} & \textbf{Clasificación Correcta} & \textbf{Efectividad (\%)} \\
-\midrule
-Cubo (Alineado $0^\circ \pm 15^\circ$) & 10 & 10 & 100\% \\
-Cubo (Rotado en diagonal $45^\circ \pm 15^\circ$) & 10 & 10 & 100\% \\
-Cono Truncado (Circular) & 20 & 19 & 95\% \\
-\midrule
-\textbf{Total Global} & \textbf{40} & \textbf{39} & \textbf{97.5\%} \\
-\bottomrule
+\scriptsize
+\begin{tabular}{|c|c|c|c|l|p{5.2cm}|}
+\hline
+\textbf{Nº} & \textbf{V [mm/s]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} & \textbf{Observaciones / Diagnóstico} \\ \hline
+1 & 85.0 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+2 & 98.4 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+3 & 90.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+4 & 71.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+5 & — & $\times$ & $\checkmark$ & Cono & Fallo en toma de V / Fallo de agarre \\ \hline
+6 & 84.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+7 & 79.1 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+8 & 90.7 & $\checkmark$ & $\times$ & Cono & Error de clasificación: depósito en caja errónea \\ \hline
+9 & 96.0 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+10 & 89.7 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+11 & 76.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+12 & 91.7 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+13 & 79.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+14 & 92.7 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+15 & 89.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+16 & 77.3 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+17 & 70.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+18 & 75.4 & — & — & — & Atasco mecánico de cinta \\ \hline
+19 & 89.7 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+20 & 91.4 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+21 & 100.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+22 & — & — & — & — & Atasco mecánico de cinta \\ \hline
+23 & 83.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+24 & 87.1 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+25 & 71.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+26 & 87.3 & $\times$ & $\checkmark$ & — & Fallo de agarre magnético \\ \hline
+27 & 117.0 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa a alta velocidad \\ \hline
+28 & 101.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+29 & 70.7 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+30 & 84.3 & $\checkmark$ & $\times$ & Cono & Error de clasificación: depósito en caja errónea \\ \hline
+31 & 75.1 & $\checkmark$ & $\times$ & Cubo & Error de clasificación: depósito en caja errónea \\ \hline
+32 & 78.1 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+33 & 82.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+34 & 76.2 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+35 & — & — & — & — & Fallo en visión (objeto fuera de ROI) \\ \hline
+36 & 104.0 & $\checkmark$ & $\times$ & Cubo & Error de clasificación: depósito en caja errónea \\ \hline
+37 & 103.4 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+38 & 84.0 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+39 & 70.3 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+40 & 101.7 & $\times$ & $\checkmark$ & — & Fallo de agarre magnético \\ \hline
+41 & 79.8 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+42 & 91.0 & $\checkmark$ & $\times$ & Cono & Error de clasificación: depósito en caja errónea \\ \hline
+43 & 76.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
 \end{tabular}
-\caption{Matriz de confusión de clasificación morfológica con lazo combinado Extent / Rect Ratio.}
-\label{tab:resultados_clasificacion}
+\caption{Registro experimental detallado de los ensayos de intercepción dinámica ($N = 43$).}
+\label{tab:registro_dinamico_completo}
 \end{table}
 
-\section{Caso de Uso 3: Intercepción Dinámica Síncrona a Velocidad Nominal}
-\subsection{Descripción del Escenario}
-Se reguló la cinta a su velocidad nominal de operación ($v_{\text{cinta}} \approx 85\text{ mm/s}$). El manipulador ejecutó el ciclo continuo en 1 paso: estimación por compuertas ($Y_1 \rightarrow Y_2$), planificación quíntica en FPU, intercepción en $Y = +120\text{ mm}$, elevación vertical ($Z_{\text{lift}}$) y depósito clasificado.
+\subsection{Resultados Cuantitativos y Análisis Estadístico}
+Del total de 43 registros de prueba:
+\begin{itemize}
+    \item Se descartaron 3 eventos por fallas externas no atribuibles al manipulador (2 atascos mecánicos en la banda motriz y 1 desalineación fuera del rango del sensor de visión).
+    \item Sobre los \textbf{40 ciclos operativos válidos}, el robot logró completar el ciclo completo (\textit{Pick} exitoso, despegue vertical, traslado y \textit{Place} clasificado en la caja correcta) en \textbf{32 ocasiones}, representando una \textbf{tasa de éxito global del 80.0\%}.
+    \item La tasa de intercepción y sujeción inicial en movimiento (\textit{Pick Rate}) alcanzó el \textbf{92.5\%} (37 de 40 intentos).
+    \item En los 5 casos donde se ejecutó un \textit{Pick} correcto pero se registró fallo en la etapa de descarga (\textit{Place} $\times$), el manipulador retuvo la pieza durante toda la trayectoria pero la depositó en el contenedor incorrecto debido a una clasificación morfológica errónea.
+    \item El rango de velocidad lineal registrado osciló entre $70.3\text{ mm/s}$ y $117.0\text{ mm/s}$, con un promedio de $\bar{v} = 85.8\text{ mm/s}$ ($\sigma = 11.2\text{ mm/s}$).
+\end{itemize}
 
-\subsection{Resultados Cuantitativos}
+En la Tabla~\ref{tab:resultados_dinamico} se presenta el desglose consolidado de los modos de fallo observados durante las pruebas dinámicas.
+
 \begin{table}[H]
 \centering
 \begin{tabular}{lcc}
 \toprule
 \textbf{Resultado de la Operación} & \textbf{Eventos} & \textbf{Porcentaje (\%)} \\
 \midrule
-Captura, elevación y clasificación exitosa & 26 & 86.7\% \\
-Fallo por desprendimiento durante despegue ($Z$) & 2 & 6.7\% \\
-Fallo por error de sincronismo temporal ($\Delta t > 80\text{ ms}$) & 2 & 6.7\% \\
+Ciclo completo exitoso (\textit{Pick} + \textit{Place} clasificado correcto) & 32 & 80.0\% \\
+Fallo en clasificación morfológica (depósito en caja errónea) & 5 & 12.5\% \\
+Fallo en agarre / sincronismo inicial (\textit{Pick} $\times$) & 3 & 7.5\% \\
 \midrule
-\textbf{Tasa de Éxito Global (Success Rate)} & \multicolumn{2}{c}{\textbf{86.7\%}} \\
+\textbf{Total de Ensayos Operativos Válidos} & \textbf{40} & \textbf{100.0\%} \\
 \bottomrule
 \end{tabular}
-\caption{Rendimiento cuantitativo en intercepción dinámica continua ($N = 30$).}
+\caption{Rendimiento cuantitativo y análisis de fallos en modo dinámico continuo ($N = 40$).}
 \label{tab:resultados_dinamico}
 \end{table}
 
-\section{Caso de Uso 4: Límites Operativos de Velocidad y Rechazo Cinemático}
-\subsection{Descripción del Escenario}
-Se sometió el sistema a un barrido progresivo de velocidades en la cinta transportadora desde $40\text{ mm/s}$ hasta $220\text{ mm/s}$ en incrementos de $20\text{ mm/s}$ para verificar el filtro de factibilidad cinemática ($T_{\text{min}} = 0.85\text{ s}$) y el retorno evasivo.
-
-\subsection{Resultados Cuantitativos}
-Se comprobó que el rango de operación óptimo se sitúa entre $50\text{ mm/s}$ y $110\text{ mm/s}$. Para velocidades de cinta superiores a $140\text{ mm/s}$, el algoritmo de descarte cinemático abortó correctamente el 100\% de las operaciones riesgosas, evitando colisiones mecánicas y pérdidas de paso en los motores.
-
 \section{Registro Audiovisual y Demostraciones}
-Para facilitar la evaluación externa y la verificación de los resultados obtenidos, los registros audiovisuales de los ensayos se encuentran estructurados según los casos de uso:
+Para facilitar la evaluación externa y la verificación experimental de los resultados obtenidos, los registros audiovisuales de los ensayos se encuentran disponibles en el repositorio multimedia institucional del proyecto:
 \begin{itemize}
-    \item \textbf{Video Anexo 1 (Pick-and-Place Estático):} Validación del lazo cerrado de visión y repetibilidad posicional del efector final.
-    \item \textbf{Video Anexo 2 (Intercepción Dinámica Continua V2):} Secuencia completa de detección en compuertas, intercepción síncrona en movimiento, despegue vertical y clasificación en bandejas.
-    \item \textbf{Video Anexo 3 (Failsafe y Retorno Rápido):} Demostración del comportamiento de la máquina de estados ante desprendimiento de pieza y rechazo automático por velocidad excesiva.
+    \item \textbf{Video Anexo 1 (Pick-and-Place Estático):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQAEfuTCPxe3T4dsjXcwBnaGAX35Iyutr4qPirEA1u29M0E?e=xh17bC&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiIwYjc5ZTc4OC1jYmUwLTQ1OWYtOTJlZi04ZTNkYzM1Yjc1MjcifX0%3D}{Acceso al registro audiovisual del Caso 1 (SharePoint / OneDrive UNCUYO)},exhibiendo la calibración óptica, repetibilidad milimétrica y validación del lazo cerrado de visión.
+    \item \textbf{Video Anexo 2 (Intercepción Dinámica Continua V2):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQDCwvXBABLkS5B_CfnKQVsbAdtK2KCxrWGJi_acs33pOqM?e=9aRyCH&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiI4ODBjNjM5OC1jZDcyLTQ0OWEtODJmOS0wZWQwMWY2ZGIxMjIifX0%3D}{Acceso al registro audiovisual del Caso 2 (SharePoint / OneDrive UNCUYO)}, exhibiendo la detección en compuertas espaciales, sincronización temporal MRU, intercepción en movimiento, elevación vertical pura ($Z_{\text{lift}}$) y descarga clasificada.
+    \item \textbf{Video Anexo 3 (Failsafe y Retorno Rápido):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQC4HhHrg-AMSam3l6sVpuQnAaCE1OA0pd9p2rAQQmxLEsE?e=YsTjAv&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiIzNzNjZGEwNS04NGYwLTQ2MTYtYTJjNi1kNDBiYjBlMGJkYjkifX0%3D}{Acceso al registro audiovisual del Caso 3 (SharePoint / OneDrive UNCUYO)} Validación del comportamiento determinista de la máquina de estados ante desprendimiento de pieza y rechazo cinemático por exceso de velocidad.
 \end{itemize}
 
 \chapter{Conclusiones, Limitaciones y Trabajos Futuros}
@@ -878,7 +936,7 @@ Para facilitar la evaluación externa y la verificación de los resultados obten
 En el presente Proyecto Final de Estudios se transformó una plataforma experimental estática en una celda de manufactura robotizada y dinámica, orientada a estándares industriales. Las principales conclusiones técnicas son:
 \begin{enumerate}
     \item \textbf{Arquitectura Embebida Determinista:} La migración de la cinemática inversa analítica y de la generación de trayectorias quínticas ($C^2$) hacia la FPU del microcontrolador STM32F446RE eliminó el cuello de botella de comunicaciones en ROS 2, asegurando perfiles de velocidad suaves a 100 Hz sin pérdidas de paso.
-    \item \textbf{Percepción Visual Robusta:} La estimación determinista de velocidad lineal mediante compuertas espaciales fijas en OpenCV desacopló el cálculo temporal de la latencia de renderizado de la UI. Asimismo, el enfoque combinado de \textit{Extent} y \textit{Rect Ratio} garantizó una clasificación geométrica invariante a la orientación con un 97.5\% de efectividad.
+    \item \textbf{Percepción Visual Robusta:} La estimación determinista de velocidad lineal mediante compuertas espaciales fijas en OpenCV desacopló el cálculo temporal de la latencia de renderizado de la UI. Asimismo, el enfoque combinado de \textit{Extent} y \textit{Rect Ratio} garantizó una clasificación geométrica invariante a la orientación con un 87.2\% de efectividad global (100\% en piezas cúbicas).
     \item \textbf{Reingeniería Mecánica y Eléctrica:} La incorporación de uniones por chaveta en los ejes de los motores paso a paso y la reorganización del cableado I2C resolvieron de forma definitiva las fallas críticas de deslizamiento torsional e interferencia electromagnética heredadas del prototipo original.
 \end{enumerate}
 
@@ -887,15 +945,17 @@ Se identifican las siguientes limitaciones en el prototipo actual:
 \begin{itemize}
     \item \textbf{Rigidez Mecánica y Carga Útil:} La estructura fabricada en impresión 3D (PLA/PETG) presenta flexiones elásticas marginales ante aceleraciones bruscas, limitando la carga útil del efector a piezas livianas ($< 80\text{ g}$).
     \item \textbf{Efector Magnético:} El sistema de sujeción restringe la manipulación a objetos con propiedades o insertos ferromagnéticos y resulta sensible a desalineaciones angulares en la superficie de contacto.
+    \item \textbf{Dinámica de Tracción de la Banda:} La cinta transportadora tiende a frenarse ocasionalmente debido a la fricción acumulada en los apoyos mecánicos y desalineaciones de tensión, lo que introduce variaciones momentáneas en el perfil de velocidad de transporte de las piezas.
     \item \textbf{Sensibilidad a la Iluminación:} Si bien la calibración interactiva HSV es rápida, variaciones drásticas en la luz solar ambiental pueden exigir reajustes periódicos de los umbrales cromáticos.
 \end{itemize}
 
 \section{Trabajos Futuros}
 \begin{itemize}
     \item Desarrollar un efector final por succión neumática (ventosa de vacío) para ampliar el abanico de materiales manipulables.
+    \item Rediseñar los materiales de la cinta transportadora y rodillos de tracción, reemplazando la cinta antideslizante tipo lija para pisos utilizada actualmente en los cilindros por bandas de caucho vulcanizado o recubrimientos de poliuretano industrial con textura de alto agarre, optimizando el coeficiente de fricción para evitar caídas y deslizamientos sin comprometer la fluidez del movimiento.
+    \item Desarrollar e integrar un gemelo digital (\textit{Digital Twin}) en entornos de simulación robótica (como Gazebo o Isaac Sim) sincronizado en tiempo real con la telemetría micro-ROS, permitiendo la validación previa de trayectorias complejas, prevención de colisiones y pruebas virtuales de nuevas secuencias operativas.
+    \item Implementar el módulo de supervisión remota e IoT (planteado inicialmente como objetivo opcional), integrando el microcontrolador ESP32 para la transmisión inalámbrica de telemetría, alertas operativas y monitoreo de estados en tiempo real a través de un panel de control interactivo en Node-RED.
     \item Incorporar un sistema de iluminación LED difusa controlada para aislar completamente la celda de las condiciones de luz externa.
-    \item Integrar un encoder incremental sobre el eje motriz de la cinta para medir fluctuaciones de velocidad en tiempo real causadas por rozamiento o variaciones de carga.
-    \item Implementar redes neuronales embebidas (TinyML) para la clasificación de objetos mediante microcontroladores especializados con aceleración de hardware.
 \end{itemize}
 
 \section{Guía de Reproducibilidad y Entorno Técnico}

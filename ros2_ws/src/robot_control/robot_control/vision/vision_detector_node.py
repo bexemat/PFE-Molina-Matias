@@ -51,7 +51,7 @@ class VisionDetectorNode(Node):
         self.cap.set(cv2.CAP_PROP_FPS, 30)
 
         # RANGOS HSV
-        self.lower_hsv = np.array([136, 64, 219])
+        self.lower_hsv = np.array([131, 120, 160])
         self.upper_hsv = np.array([179, 255, 255])
 
         self.kernel_close = np.ones((11, 11), np.uint8)
@@ -118,10 +118,10 @@ class VisionDetectorNode(Node):
                     # 4. Lógica de Clasificación Robusta
                     if ratio_cajas < 0.85 or extent_rotado > 0.85:
                         clase_msg.data = 1
-                        forma_txt = f"Cubo (E:{extent_rotado:.2f} R:{ratio_cajas:.2f})"
+                        forma_txt = f"Cubo"
                     else:
                         clase_msg.data = 2
-                        forma_txt = f"Cono (E:{extent_rotado:.2f} R:{ratio_cajas:.2f})"
+                        forma_txt = f"Cono"
                     
                     self.publisher_clase.publish(clase_msg)
 
@@ -165,7 +165,7 @@ class VisionDetectorNode(Node):
                         cv2.drawContours(frame, [box], 0, (255, 0, 0), 2)
                     cv2.circle(frame, (int(cx), int(cy)), 5, (0, 0, 255), -1)
                     if 'forma_txt' in locals():
-                        txt = f"{forma_txt} | Y:{y_robot:.1f} | V:{self.vel_calculada_mm_s:.1f}"
+                        txt = f"{forma_txt} | Y:{y_robot:.1f} "
                         cv2.putText(frame, txt, (int(cx) + 10, int(cy) - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
         try:
