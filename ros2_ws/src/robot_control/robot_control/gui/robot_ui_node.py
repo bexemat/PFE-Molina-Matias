@@ -1,12 +1,33 @@
 #!/usr/bin/env python3
-# Archivo: robot_control/gui/robot_ui_node.py
+"""Punto de entrada de la Interfaz Gráfica de Usuario (GUI) en PyQt5.
+
+Proporciona cinco entornos de control:
+ 1. Control Manual articular P2P y cinemática inversa directa.
+ 2. Gráficos en tiempo real de seguimiento articular (AS5600 vs Target).
+ 3. Planificador cartesiano quíntico local (ctraj).
+ 4. Pick-and-Place estático con retroalimentación cenital.
+ 5. Intercepción dinámica continua sobre cinta transportadora.
+"""
+
 import sys
 import time
 import math
 import collections
+from typing import List, Optional
+
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QSlider, QLabel, QGroupBox, QGridLayout, QTabWidget, QDoubleSpinBox
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QSlider,
+    QLabel,
+    QGroupBox,
+    QGridLayout,
+    QTabWidget,
+    QDoubleSpinBox,
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPixmap, QImage
@@ -15,127 +36,155 @@ from robot_control.gui.widgets.mpl_canvas import MplCanvas
 from robot_control.gui.widgets.mpl_canvas_yz import MplCanvas2D_YZ
 from robot_control.gui.tabs.dynamic_tab import DynamicTab
 from robot_control.gui.ros_thread import ROS2Thread
-
-# --- IMPORTAMOS LA MÁQUINA DE ESTADOS MODULARIZADA ---
 from robot_control.gui.pick_and_place_sm import PickAndPlaceSM
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, ros_thread: ROS2Thread):
+    """Ventana principal de supervisión y control del robot."""
+
+    DESIRED_CART_VEL: float = 100.0  # Velocidad cartesiana nominal [mm/s]
+
+    def __init__(self, ros_thread: ROS2Thread) -> None:
+        """Inicializa elementos visuales, historiales y lazos de actualización."""
         super().__init__()
         self.ros_thread = ros_thread
 
-        # Variables de estado de la UI
-        self.estop_active = False
-        self.magnet_active = False
+        self.estop_active: bool = False
+        self.magnet_active: bool = False
 
-        self.q_real = [0.0, 90.0, 0.0]
-        self.pos_xyz = [170.0, 0.0, 170.0]
-        self.q_target = [0.0, 90.0, 0.0]
+        self.q_real: List[float] = [0.0, 90.0, 0.0]
+        self.pos_xyz: List[float] = [170.0, 0.0, 170.0]
+        self.q_target: List[float] = [0.0, 90.0, 0.0]
 
-        # --- VARIABLES DE PICK AND PLACE ESTÁTICO (PESTAÑA 4) ---
-        self.static_step = 0
-        self.static_obj_class = 1
-        self.static_place_x = 115.0
-        self.static_place_y = 115.0
-        self.static_place_z = 42.0
-        self.static_guard_xyz = [215.0, -75.0, 120.0]  # Posición de guardia calibrada (Z=120)
-        self.DESIRED_CART_VEL = 100.0                   # Velocidad cartesiana a 100 mm/s
+        # Parámetros del ciclo estático (Pestaña 4)
+        self.static_step: int = 0
+        self.static_obj_class: int = 1
+        self.static_place_x: float = 115.0
+        self.static_place_y: float = 115.0
+        self.static_place_z: float = 42.0
+        self.static_guard_xyz: List[float] = [215.0, -75.0, 120.0]
 
-        # Historiales para los gráficos
-        self.max_points = 100
+        # Buffers circulares para graficado en tiempo real
+        self.max_points: int = 100
         self.time_history = collections.deque(maxlen=self.max_points)
         self.q1_real_hist = collections.deque(maxlen=self.max_points)
         self.q2_real_hist = collections.deque(maxlen=self.max_points)
         self.q3_real_hist = collections.deque(maxlen=self.max_points)
-        
+
         self.q1_target_hist = collections.deque(maxlen=self.max_points)
         self.q2_target_hist = collections.deque(maxlen=self.max_points)
         self.q3_target_hist = collections.deque(maxlen=self.max_points)
 
-        self.start_time = time.time()
+        self.start_time: float = time.time()
 
-        # Variables de visión
-        self.vision_target = [0.0, 0.0, 0.0]
-        self.vision_start_y = None
-        self.vision_start_z = None
-        self.vision_target_y = None
-        self.vision_target_z = None
-        self.yz_trace_y = []
-        self.yz_trace_z = []
-        self.is_tracking_yz = False  
+        # Parámetros de visión y trazado sagital Y-Z
+        self.vision_target: List[float] = [0.0, 0.0, 0.0]
+        self.vision_start_y: Optional[float] = None
+        self.vision_start_z: Optional[float] = None
+        self.vision_target_y: Optional[float] = None
+        self.vision_target_z: Optional[float] = None
+        self.yz_trace_y: List[float] = []
+        self.yz_trace_z: List[float] = []
+        self.is_tracking_yz: bool = False
 
-        self.waiting_for_speed = False
-        self.last_detection_time = 0.0
+        self.waiting_for_speed: bool = False
+        self.last_detection_time: float = 0.0
 
-        # Conexiones de retroalimentación de ROS
+        # Conexión de señales del hilo ROS 2
         self.ros_thread.feedback_received.connect(self.on_feedback_received)
-        self.ros_thread.planner_status_received.connect(self.on_planner_status_received)
-        self.ros_thread.vision_target_received.connect(self.on_vision_target_received)
-        self.ros_thread.vision_dynamic_target_received.connect(self.on_vision_dynamic_target_received)
-        self.ros_thread.vision_image_received.connect(self.on_vision_image_received)
-        
-        if hasattr(self.ros_thread, 'vision_class_received'):
-            self.ros_thread.vision_class_received.connect(self.on_vision_class_received)
-        
+        self.ros_thread.planner_status_received.connect(
+            self.on_planner_status_received
+        )
+        self.ros_thread.vision_target_received.connect(
+            self.on_vision_target_received
+        )
+        self.ros_thread.vision_dynamic_target_received.connect(
+            self.on_vision_dynamic_target_received
+        )
+        self.ros_thread.vision_image_received.connect(
+            self.on_vision_image_received
+        )
+
+        if hasattr(self.ros_thread, "vision_class_received"):
+            self.ros_thread.vision_class_received.connect(
+                self.on_vision_class_received
+            )
+
         self.init_ui()
 
-        # Instanciamos la máquina de estados dinámica
+        # Instanciación de la máquina de estados dinámica
         self.sm = PickAndPlaceSM(self.ros_thread, self.tab_dynamic)
 
-    # =================================================================
-    # UTILIDADES DE CÁLCULO DE VELOCIDAD CARTESIANA
-    # =================================================================
-    def calc_duration_100mms(self, p_start, p_end, min_dur=0.6):
-        """Calcula el tiempo necesario para recorrer la distancia euclidiana a 100 mm/s."""
+    def calc_duration_100mms(
+        self,
+        p_start: List[float],
+        p_end: List[float],
+        min_dur: float = 0.6,
+    ) -> float:
+        """Calcula el tiempo de trayectoria a velocidad cartesiana constante de 100 mm/s.
+
+        Args:
+            p_start (List[float]): Posición inicial [X, Y, Z] en [mm].
+            p_end (List[float]): Posición final [X, Y, Z] en [mm].
+            min_dur (float, optional): Cota inferior de duración en segundos [s].
+
+        Returns:
+            float: Duración temporal requerida [s].
+        """
         dist = math.sqrt(
-            (p_end[0] - p_start[0])**2 + 
-            (p_end[1] - p_start[1])**2 + 
-            (p_end[2] - p_start[2])**2
+            (p_end[0] - p_start[0]) ** 2
+            + (p_end[1] - p_start[1]) ** 2
+            + (p_end[2] - p_start[2]) ** 2
         )
         return max(min_dur, dist / self.DESIRED_CART_VEL)
 
-    # =================================================================
-    # COMUNICACIÓN CON ROS Y VISIÓN
-    # =================================================================
-    def on_vision_class_received(self, clase: int):
+    # -------------------------------------------------------------
+    # SLOTS DE RESPUESTA A SEÑALES ROS 2
+    # -------------------------------------------------------------
+
+    def on_vision_class_received(self, clase: int) -> None:
         self.sm.set_object_class(clase)
         self.static_obj_class = clase
 
-    def on_vision_target_received(self, target_xyz):
+    def on_vision_target_received(self, target_xyz: List[float]) -> None:
         self.vision_target = target_xyz
         if self.sm.auto_step == 2:
             self.last_detection_time = time.time()
             self.sm.trigger_ctraj_interception(self.vision_target[1])
 
-    def on_vision_dynamic_target_received(self, target_xyz):
+    def on_vision_dynamic_target_received(
+        self, target_xyz: List[float]
+    ) -> None:
         vel_mm_s, _, flag_exitosa = target_xyz
         if self.waiting_for_speed and flag_exitosa == 1.0:
             self.sm.set_calculated_vel(vel_mm_s)
             self.waiting_for_speed = False
-            self.tab_dynamic.lbl_dyn_status.setText(f"velocidad tomada exitosamente v={vel_mm_s:.2f} mm/s")
-            self.tab_dynamic.lbl_dyn_status.setStyleSheet("background-color: #27ae60; color: white; padding: 10px; border-radius: 5px; font-weight: bold;")
-            self.tab_dynamic.lbl_vel_val.setText(f"Velocidad Seteada: {vel_mm_s:.2f} mm/s")
+            self.tab_dynamic.lbl_dyn_status.setText(
+                f"Velocidad registrada exitosamente: {vel_mm_s:.2f} mm/s"
+            )
+            self.tab_dynamic.lbl_dyn_status.setStyleSheet(
+                "background-color: #27ae60; color: white; padding: 10px; border-radius: 5px; font-weight: bold;"
+            )
+            self.tab_dynamic.lbl_vel_val.setText(
+                f"Velocidad Seteada: {vel_mm_s:.2f} mm/s"
+            )
 
-    def execute_interception(self):
-        if self.estop_active: return
+    def execute_interception(self) -> None:
+        if self.estop_active:
+            return
         tracking = self.sm.execute_interception(self.pos_xyz)
         if tracking:
             self.is_tracking_yz = True
 
-    # =================================================================
-    # PICK AND PLACE ESTÁTICO (PESTAÑA 4) A 100 mm/s
-    # =================================================================
-    def execute_vision_trajectory(self):
-        """Inicia la rutina estática activando el electroimán y yendo hacia la pieza."""
-        if self.estop_active: return
-        
-        # 1. Encender electroimán previo al pick
+    def execute_vision_trajectory(self) -> None:
+        """Inicia la secuencia de pick-and-place para piezas estáticas."""
+        if self.estop_active:
+            return
+
         self.magnet_active = True
         self.ros_thread.send_magnet(True)
-        self.btn_magnet.setText("🧲 ELECTROIMÁN: ENCENDIDO")
+        self.btn_magnet.setText("ELECTROIMÁN: ENCENDIDO")
 
-        # 2. Configuración de la caja de destino según la clase
         if self.static_obj_class == 1:
             self.static_place_x = 115.0
             self.static_place_y = 115.0
@@ -153,92 +202,134 @@ class MainWindow(QMainWindow):
         self.yz_trace_z = []
         self.is_tracking_yz = True
 
-        # Paso 1: Bajar hacia el objeto detectado
         self.static_step = 1
         dur = self.calc_duration_100mms(self.pos_xyz, self.vision_target)
-        self.lbl_v_status.setText(f"Estado: 🎯 PICK hacia objeto (T={dur:.2f}s)")
-        self.lbl_v_status.setStyleSheet("background-color: #8e44ad; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
-        self.ros_thread.send_ctraj_cmd(self.vision_target[0], self.vision_target[1], self.vision_target[2], duration=dur)
+        self.lbl_v_status.setText(f"Estado: PICK hacia objeto (T={dur:.2f}s)")
+        self.lbl_v_status.setStyleSheet(
+            "background-color: #8e44ad; color: white; padding: 12px; border-radius: 5px; font-weight: bold;"
+        )
+        self.ros_thread.send_ctraj_cmd(
+            self.vision_target[0],
+            self.vision_target[1],
+            self.vision_target[2],
+            duration=dur,
+        )
 
-    def on_planner_status_received(self, code: int):
-        # 1. Atender la máquina de estados dinámica si está activa
+    def on_planner_status_received(self, code: int) -> None:
+        """Despacha las transiciones según el planificador activo."""
         if self.sm.auto_step > 0:
             self.sm.process_planner_status(code, self)
             return
 
-        # 2. Atender la máquina de estados estática (Pestaña 4)
         if code == 1:
-            self.lbl_planner_state.setText("Estado: ⏳ TRAYECTORIA EN EJECUCIÓN...")
+            self.lbl_planner_state.setText(
+                "Estado: TRAYECTORIA EN EJECUCIÓN..."
+            )
         elif code == 2:
-            self.lbl_planner_state.setText("Estado: ✅ COMPLETADO")
+            self.lbl_planner_state.setText("Estado: COMPLETADO")
 
             if self.static_step == 1:
-                # Paso 2: Elevación vertical pura de seguridad (Z=125 mm)
+                # Elevación vertical pura (Lift Z=125 mm)
                 self.static_step = 2
-                target_lift = [self.vision_target[0], self.vision_target[1], 125.0]
-                dur = self.calc_duration_100mms(self.pos_xyz, target_lift, min_dur=0.5)
-                self.lbl_v_status.setText("Estado: ⬆️ Elevando pieza (Lift)...")
-                self.lbl_v_status.setStyleSheet("background-color: #2980b9; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
-                self.ros_thread.send_ctraj_cmd(target_lift[0], target_lift[1], target_lift[2], duration=dur)
+                target_lift = [
+                    self.vision_target[0],
+                    self.vision_target[1],
+                    125.0,
+                ]
+                dur = self.calc_duration_100mms(
+                    self.pos_xyz, target_lift, min_dur=0.5
+                )
+                self.lbl_v_status.setText("Estado: Elevando pieza (Lift)...")
+                self.lbl_v_status.setStyleSheet(
+                    "background-color: #2980b9; color: white; padding: 12px; border-radius: 5px; font-weight: bold;"
+                )
+                self.ros_thread.send_ctraj_cmd(
+                    target_lift[0], target_lift[1], target_lift[2], duration=dur
+                )
 
             elif self.static_step == 2:
-                # Paso 3: Traslado elevado a la caja de clasificación (Z=110 mm)
+                # Traslado elevado al contenedor de descarga (Z=110 mm)
                 self.static_step = 3
-                target_box_high = [self.static_place_x, self.static_place_y, 110.0]
+                target_box_high = [
+                    self.static_place_x,
+                    self.static_place_y,
+                    110.0,
+                ]
                 dur = self.calc_duration_100mms(self.pos_xyz, target_box_high)
                 clase_str = "Cubo" if self.static_obj_class == 1 else "Cono"
-                self.lbl_v_status.setText(f"Estado: 🚀 PLACE ({clase_str}) hacia X={self.static_place_x}, Y={self.static_place_y}...")
-                self.lbl_v_status.setStyleSheet("background-color: #3498db; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
-                self.ros_thread.send_ctraj_cmd(target_box_high[0], target_box_high[1], target_box_high[2], duration=dur)
+                self.lbl_v_status.setText(
+                    f"Estado: PLACE ({clase_str}) hacia X={self.static_place_x}, Y={self.static_place_y}..."
+                )
+                self.lbl_v_status.setStyleSheet(
+                    "background-color: #3498db; color: white; padding: 12px; border-radius: 5px; font-weight: bold;"
+                )
+                self.ros_thread.send_ctraj_cmd(
+                    target_box_high[0],
+                    target_box_high[1],
+                    target_box_high[2],
+                    duration=dur,
+                )
 
             elif self.static_step == 3:
-                # Paso 4: Descenso final en la caja (Z=42 mm)
+                # Descenso final en contenedor (Z=42 mm)
                 self.static_step = 4
-                target_box_low = [self.static_place_x, self.static_place_y, self.static_place_z]
-                dur = self.calc_duration_100mms(self.pos_xyz, target_box_low, min_dur=0.6)
-                self.lbl_v_status.setText(f"Estado: ⬇️ Descendiendo a Z={self.static_place_z} mm...")
-                self.ros_thread.send_ctraj_cmd(target_box_low[0], target_box_low[1], target_box_low[2], duration=dur)
+                target_box_low = [
+                    self.static_place_x,
+                    self.static_place_y,
+                    self.static_place_z,
+                ]
+                dur = self.calc_duration_100mms(
+                    self.pos_xyz, target_box_low, min_dur=0.6
+                )
+                self.lbl_v_status.setText(
+                    f"Estado: Descendiendo a Z={self.static_place_z} mm..."
+                )
+                self.ros_thread.send_ctraj_cmd(
+                    target_box_low[0],
+                    target_box_low[1],
+                    target_box_low[2],
+                    duration=dur,
+                )
 
             elif self.static_step == 4:
-                # Paso 5: Apagar electroimán y regresar a guardia
+                # Soltar pieza y retorno a guardia
                 self.static_step = 5
                 self.magnet_active = False
                 self.ros_thread.send_magnet(False)
-                self.btn_magnet.setText("🧲 ELECTROIMÁN: APAGADO")
+                self.btn_magnet.setText("ELECTROIMÁN: APAGADO")
 
-                dur = self.calc_duration_100mms(self.pos_xyz, self.static_guard_xyz)
-                self.lbl_v_status.setText("Estado: 🔓 Pieza depositada. Retornando a guardia...")
-                self.lbl_v_status.setStyleSheet("background-color: #27ae60; color: white; padding: 12px; border-radius: 5px; font-weight: bold;")
-                self.ros_thread.send_ctraj_cmd(self.static_guard_xyz[0], self.static_guard_xyz[1], self.static_guard_xyz[2], duration=dur)
+                dur = self.calc_duration_100mms(
+                    self.pos_xyz, self.static_guard_xyz
+                )
+                self.lbl_v_status.setText(
+                    "Estado: Pieza depositada. Retornando a guardia..."
+                )
+                self.lbl_v_status.setStyleSheet(
+                    "background-color: #27ae60; color: white; padding: 12px; border-radius: 5px; font-weight: bold;"
+                )
+                self.ros_thread.send_ctraj_cmd(
+                    self.static_guard_xyz[0],
+                    self.static_guard_xyz[1],
+                    self.static_guard_xyz[2],
+                    duration=dur,
+                )
 
             elif self.static_step == 5:
-                # Finalizado
                 self.static_step = 0
                 self.is_tracking_yz = False
+                self.lbl_v_status.setText("Estado Actual: CICLO COMPLETADO")
+                self.lbl_v_status.setStyleSheet(
+                    "background-color: #ecf0f1; color: #2c3e50; padding: 12px; border-radius: 5px; font-weight: bold;"
+                )
 
-                # --- REINICIO DEL GRÁFICO Y-Z ---
-                self.vision_start_y = None
-                self.vision_start_z = None
-                self.vision_target_y = None
-                self.vision_target_z = None
-                self.yz_trace_y = []
-                self.yz_trace_z = []
-                self.canvas_yz.axes.cla()
-                self.canvas_yz.axes.set_xlabel("Coordenada Y [mm]")
-                self.canvas_yz.axes.set_ylabel("Coordenada Z [mm]")
-                self.canvas_yz.axes.set_title("Gráfico Y-Z")
-                self.canvas_yz.axes.grid(True)
-                self.canvas_yz.draw()
-                # -------------------------------
+    # -------------------------------------------------------------
+    # CONFIGURACIÓN VISUAL DE LA INTERFAZ
+    # -------------------------------------------------------------
 
-                self.lbl_v_status.setText("Estado Actual: ✅ CICLO COMPLETADO")
-                self.lbl_v_status.setStyleSheet("background-color: #ecf0f1; color: #2c3e50; padding: 12px; border-radius: 5px; font-weight: bold;")
-
-    # =================================================================
-    # CONSTRUCCIÓN DE LA INTERFAZ GRÁFICA
-    # =================================================================
-    def init_ui(self):
-        self.setWindowTitle("Control y Monitoreo - EEZYbotARM MK2 (STM32 Embedded)")
+    def init_ui(self) -> None:
+        self.setWindowTitle(
+            "Control y Monitoreo - EEZYbotARM MK2 (STM32 Embedded)"
+        )
         self.resize(750, 1020)
 
         self.tabs = QTabWidget()
@@ -246,22 +337,22 @@ class MainWindow(QMainWindow):
 
         self.tab_control = QWidget()
         self.setup_tab_control()
-        self.tabs.addTab(self.tab_control, "🎛️ Control Manual (P2P)")
+        self.tabs.addTab(self.tab_control, "Control Manual (P2P)")
 
         self.tab_graphs = QWidget()
         self.setup_tab_graphs()
-        self.tabs.addTab(self.tab_graphs, "📈 Gráficos en Tiempo Real")
+        self.tabs.addTab(self.tab_graphs, "Gráficos en Tiempo Real")
 
         self.tab_planner = QWidget()
         self.setup_tab_planner()
-        self.tabs.addTab(self.tab_planner, "🤖 Planificador Cartesiano (ctraj)")
+        self.tabs.addTab(self.tab_planner, "Planificador Cartesiano (ctraj)")
 
         self.tab_vision = QWidget()
         self.setup_tab_vision()
-        self.tabs.addTab(self.tab_vision, "👁️ Interfaz de Visión (Estática)")
+        self.tabs.addTab(self.tab_vision, "Interfaz de Visión (Estática)")
 
         self.tab_dynamic = DynamicTab()
-        self.tabs.addTab(self.tab_dynamic, "⚡ Interfaz Dinámica (Síncrona)")
+        self.tabs.addTab(self.tab_dynamic, "Interfaz Dinámica (Síncrona)")
 
         self.tab_dynamic.btn_dyn_set_vel.clicked.connect(self.trigger_set_speed)
         self.tab_dynamic.btn_dyn_exec.clicked.connect(self.execute_interception)
@@ -271,25 +362,31 @@ class MainWindow(QMainWindow):
         self.plot_timer.timeout.connect(self.update_plots)
         self.plot_timer.start(33)
 
-    def setup_tab_control(self):
+    def setup_tab_control(self) -> None:
         layout = QVBoxLayout(self.tab_control)
 
-        self.btn_estop = QPushButton("🛑 PARADA DE EMERGENCIA (INACTIVA)")
+        self.btn_estop = QPushButton("PARADA DE EMERGENCIA (INACTIVA)")
         self.btn_estop.setFont(QFont("Arial", 11, QFont.Bold))
-        self.btn_estop.setStyleSheet("background-color: #27ae60; color: white; padding: 12px; border-radius: 5px;")
+        self.btn_estop.setStyleSheet(
+            "background-color: #27ae60; color: white; padding: 12px; border-radius: 5px;"
+        )
         self.btn_estop.clicked.connect(self.toggle_estop)
         layout.addWidget(self.btn_estop)
 
         group_indep = QGroupBox("Acciones Independientes")
         layout_indep = QHBoxLayout()
-        self.btn_homing = QPushButton("🏠 EJECUTAR HOMING")
+        self.btn_homing = QPushButton("EJECUTAR HOMING")
         self.btn_homing.setFont(QFont("Arial", 10, QFont.Bold))
-        self.btn_homing.setStyleSheet("background-color: #2980b9; color: white; padding: 10px; border-radius: 5px;")
+        self.btn_homing.setStyleSheet(
+            "background-color: #2980b9; color: white; padding: 10px; border-radius: 5px;"
+        )
         self.btn_homing.clicked.connect(lambda: self.ros_thread.send_homing())
 
-        self.btn_magnet = QPushButton("🧲 ELECTROIMÁN: APAGADO")
+        self.btn_magnet = QPushButton("ELECTROIMÁN: APAGADO")
         self.btn_magnet.setFont(QFont("Arial", 10, QFont.Bold))
-        self.btn_magnet.setStyleSheet("background-color: #7f8c8d; color: white; padding: 10px; border-radius: 5px;")
+        self.btn_magnet.setStyleSheet(
+            "background-color: #7f8c8d; color: white; padding: 10px; border-radius: 5px;"
+        )
         self.btn_magnet.clicked.connect(self.toggle_magnet)
 
         layout_indep.addWidget(self.btn_homing)
@@ -309,8 +406,12 @@ class MainWindow(QMainWindow):
         self.spin_q1.setRange(-90.0, 90.0)
         self.spin_q1.setValue(0.0)
         self.spin_q1.setSingleStep(0.5)
-        self.slider_q1.valueChanged.connect(lambda v: self.spin_q1.setValue(float(v)))
-        self.spin_q1.valueChanged.connect(lambda v: self.slider_q1.setValue(int(v)))
+        self.slider_q1.valueChanged.connect(
+            lambda v: self.spin_q1.setValue(float(v))
+        )
+        self.spin_q1.valueChanged.connect(
+            lambda v: self.slider_q1.setValue(int(v))
+        )
         grid_sliders.addWidget(self.slider_q1, 0, 1)
         grid_sliders.addWidget(self.spin_q1, 0, 2)
 
@@ -322,8 +423,12 @@ class MainWindow(QMainWindow):
         self.spin_q2.setRange(40.0, 157.0)
         self.spin_q2.setValue(90.0)
         self.spin_q2.setSingleStep(0.5)
-        self.slider_q2.valueChanged.connect(lambda v: self.spin_q2.setValue(float(v)))
-        self.spin_q2.valueChanged.connect(lambda v: self.slider_q2.setValue(int(v)))
+        self.slider_q2.valueChanged.connect(
+            lambda v: self.spin_q2.setValue(float(v))
+        )
+        self.spin_q2.valueChanged.connect(
+            lambda v: self.slider_q2.setValue(int(v))
+        )
         grid_sliders.addWidget(self.slider_q2, 1, 1)
         grid_sliders.addWidget(self.spin_q2, 1, 2)
 
@@ -335,23 +440,33 @@ class MainWindow(QMainWindow):
         self.spin_q3.setRange(-75.0, 25.0)
         self.spin_q3.setValue(0.0)
         self.spin_q3.setSingleStep(0.5)
-        self.slider_q3.valueChanged.connect(lambda v: self.spin_q3.setValue(float(v)))
-        self.spin_q3.valueChanged.connect(lambda v: self.slider_q3.setValue(int(v)))
+        self.slider_q3.valueChanged.connect(
+            lambda v: self.spin_q3.setValue(float(v))
+        )
+        self.spin_q3.valueChanged.connect(
+            lambda v: self.slider_q3.setValue(int(v))
+        )
         grid_sliders.addWidget(self.slider_q3, 2, 1)
         grid_sliders.addWidget(self.spin_q3, 2, 2)
 
         layout_motors.addLayout(grid_sliders)
 
-        self.btn_move_motors = QPushButton("⚡ ENVIAR ÁNGULOS ARTICULARES (P2P)")
+        self.btn_move_motors = QPushButton(
+            "ENVIAR ÁNGULOS ARTICULARES (P2P)"
+        )
         self.btn_move_motors.setFont(QFont("Arial", 11, QFont.Bold))
-        self.btn_move_motors.setStyleSheet("background-color: #27ae60; color: white; padding: 12px; border-radius: 5px;")
+        self.btn_move_motors.setStyleSheet(
+            "background-color: #27ae60; color: white; padding: 12px; border-radius: 5px;"
+        )
         self.btn_move_motors.clicked.connect(self.send_joint_cmd)
 
         layout_motors.addWidget(self.btn_move_motors)
         group_motors.setLayout(layout_motors)
         layout.addWidget(group_motors)
 
-        group_cartesian_ctrl = QGroupBox("Ajuste Cartesiano Directo (P2P / Coordenadas X,Y,Z)")
+        group_cartesian_ctrl = QGroupBox(
+            "Ajuste Cartesiano Directo (P2P / Coordenadas X,Y,Z)"
+        )
         layout_cart_ctrl = QVBoxLayout()
         grid_xyz = QGridLayout()
 
@@ -378,9 +493,13 @@ class MainWindow(QMainWindow):
 
         layout_cart_ctrl.addLayout(grid_xyz)
 
-        self.btn_move_cartesian = QPushButton("🎯 ENVIAR CONSIGNA CARTESIANA (IK P2P)")
+        self.btn_move_cartesian = QPushButton(
+            "ENVIAR CONSIGNA CARTESIANA (IK P2P)"
+        )
         self.btn_move_cartesian.setFont(QFont("Arial", 10, QFont.Bold))
-        self.btn_move_cartesian.setStyleSheet("background-color: #8e44ad; color: white; padding: 10px; border-radius: 5px;")
+        self.btn_move_cartesian.setStyleSheet(
+            "background-color: #8e44ad; color: white; padding: 10px; border-radius: 5px;"
+        )
         self.btn_move_cartesian.clicked.connect(self.send_cartesian_cmd)
 
         layout_cart_ctrl.addWidget(self.btn_move_cartesian)
@@ -420,31 +539,37 @@ class MainWindow(QMainWindow):
         group_cart.setLayout(grid_cart)
         layout.addWidget(group_cart)
 
-    def setup_tab_graphs(self):
+    def setup_tab_graphs(self) -> None:
         layout = QVBoxLayout(self.tab_graphs)
         self.canvas = MplCanvas(self, width=5, height=6, dpi=100)
         layout.addWidget(self.canvas)
 
-    def setup_tab_planner(self):
+    def setup_tab_planner(self) -> None:
         layout = QVBoxLayout(self.tab_planner)
 
-        self.btn_estop_planner = QPushButton("🛑 PARADA DE EMERGENCIA (INACTIVA)")
+        self.btn_estop_planner = QPushButton("PARADA DE EMERGENCIA (INACTIVA)")
         self.btn_estop_planner.setFont(QFont("Arial", 11, QFont.Bold))
-        self.btn_estop_planner.setStyleSheet("background-color: #27ae60; color: white; padding: 10px; border-radius: 5px;")
+        self.btn_estop_planner.setStyleSheet(
+            "background-color: #27ae60; color: white; padding: 10px; border-radius: 5px;"
+        )
         self.btn_estop_planner.clicked.connect(self.toggle_estop)
         layout.addWidget(self.btn_estop_planner)
 
         group_pstat = QGroupBox("Estado de Ejecución")
         lay_pstat = QVBoxLayout()
-        self.lbl_planner_state = QLabel("Estado: ⏸️ REPOSO (IDLE)")
+        self.lbl_planner_state = QLabel("Estado: REPOSO (IDLE)")
         self.lbl_planner_state.setFont(QFont("Arial", 11, QFont.Bold))
         self.lbl_planner_state.setAlignment(Qt.AlignCenter)
-        self.lbl_planner_state.setStyleSheet("color: #2c3e50; padding: 8px; background-color: #ecf0f1; border-radius: 5px;")
+        self.lbl_planner_state.setStyleSheet(
+            "color: #2c3e50; padding: 8px; background-color: #ecf0f1; border-radius: 5px;"
+        )
         lay_pstat.addWidget(self.lbl_planner_state)
         group_pstat.setLayout(lay_pstat)
         layout.addWidget(group_pstat)
 
-        group_ctraj = QGroupBox("Planificación Cartesiana Local en STM32 (Polinomio Quíntico C²)")
+        group_ctraj = QGroupBox(
+            "Planificación Cartesiana Local en STM32 (Polinomio Quíntico C²)"
+        )
         lay_ctraj = QVBoxLayout()
         grid_ctraj = QGridLayout()
         grid_ctraj.addWidget(QLabel("Meta X [mm]:"), 0, 0)
@@ -473,18 +598,25 @@ class MainWindow(QMainWindow):
 
         lay_ctraj.addLayout(grid_ctraj)
 
-        btn_ctraj = QPushButton("📐 EJECUTAR CTRAJ QUÍNTICO")
+        btn_ctraj = QPushButton("EJECUTAR CTRAJ QUÍNTICO")
         btn_ctraj.setFont(QFont("Arial", 10, QFont.Bold))
-        btn_ctraj.setStyleSheet("background-color: #8e44ad; color: white; padding: 10px; border-radius: 5px;")
-        btn_ctraj.clicked.connect(lambda: self.ros_thread.send_ctraj_cmd(
-            self.spin_cx.value(), self.spin_cy.value(), self.spin_cz.value(), self.spin_cdur.value()
-        ))
+        btn_ctraj.setStyleSheet(
+            "background-color: #8e44ad; color: white; padding: 10px; border-radius: 5px;"
+        )
+        btn_ctraj.clicked.connect(
+            lambda: self.ros_thread.send_ctraj_cmd(
+                self.spin_cx.value(),
+                self.spin_cy.value(),
+                self.spin_cz.value(),
+                self.spin_cdur.value(),
+            )
+        )
         lay_ctraj.addWidget(btn_ctraj)
         group_ctraj.setLayout(lay_ctraj)
         layout.addWidget(group_ctraj)
         layout.addStretch(1)
 
-    def setup_tab_vision(self):
+    def setup_tab_vision(self) -> None:
         layout = QGridLayout(self.tab_vision)
 
         vbox_coords = QVBoxLayout()
@@ -495,7 +627,7 @@ class MainWindow(QMainWindow):
         self.lbl_v_q.setAlignment(Qt.AlignCenter)
         layout_art.addWidget(self.lbl_v_q)
         group_art.setLayout(layout_art)
-        
+
         group_cart = QGroupBox("Coordenadas Cartesianas")
         layout_cart = QVBoxLayout()
         self.lbl_v_xyz = QLabel("X=0.00  Y=0.00  Z=0.00")
@@ -503,7 +635,7 @@ class MainWindow(QMainWindow):
         self.lbl_v_xyz.setAlignment(Qt.AlignCenter)
         layout_cart.addWidget(self.lbl_v_xyz)
         group_cart.setLayout(layout_cart)
-        
+
         vbox_coords.addWidget(group_art)
         vbox_coords.addWidget(group_cart)
         layout.addLayout(vbox_coords, 0, 0)
@@ -528,53 +660,67 @@ class MainWindow(QMainWindow):
         vbox_controls = QVBoxLayout()
         self.btn_v_estop = QPushButton("Boton de Parada")
         self.btn_v_estop.setFont(QFont("Arial", 11, QFont.Bold))
-        self.btn_v_estop.setStyleSheet("background-color: #c0392b; color: white; padding: 12px; border-radius: 5px;")
+        self.btn_v_estop.setStyleSheet(
+            "background-color: #c0392b; color: white; padding: 12px; border-radius: 5px;"
+        )
         self.btn_v_estop.clicked.connect(self.toggle_estop)
-        
+
         self.btn_v_exec = QPushButton("Boton de Ejecucion")
         self.btn_v_exec.setFont(QFont("Arial", 11, QFont.Bold))
-        self.btn_v_exec.setStyleSheet("background-color: #2980b9; color: white; padding: 12px; border-radius: 5px;")
+        self.btn_v_exec.setStyleSheet(
+            "background-color: #2980b9; color: white; padding: 12px; border-radius: 5px;"
+        )
         self.btn_v_exec.clicked.connect(self.execute_vision_trajectory)
-        
+
         self.lbl_v_status = QLabel("Estado Actual: EN ESPERA")
         self.lbl_v_status.setFont(QFont("Arial", 11, QFont.Bold))
         self.lbl_v_status.setAlignment(Qt.AlignCenter)
-        self.lbl_v_status.setStyleSheet("background-color: #ecf0f1; color: #2c3e50; padding: 12px; border-radius: 5px;")
-        
+        self.lbl_v_status.setStyleSheet(
+            "background-color: #ecf0f1; color: #2c3e50; padding: 12px; border-radius: 5px;"
+        )
+
         vbox_controls.addWidget(self.btn_v_estop)
         vbox_controls.addWidget(self.btn_v_exec)
         vbox_controls.addWidget(self.lbl_v_status)
         layout.addLayout(vbox_controls, 1, 1)
 
-    # =================================================================
-    # ACCIONES P2P, MANUALES Y GRÁFICAS
-    # =================================================================
-    def on_vision_image_received(self, q_img: QImage):
-        pixmap = QPixmap.fromImage(q_img)
-        self.lbl_camera.setPixmap(pixmap.scaled(self.lbl_camera.size(), Qt.KeepAspectRatio))
-        self.tab_dynamic.lbl_camera_dyn.setPixmap(pixmap.scaled(self.tab_dynamic.lbl_camera_dyn.size(), Qt.KeepAspectRatio))
+    # -------------------------------------------------------------
+    # CONTROL MANUAL Y TELEMETRÍA
+    # -------------------------------------------------------------
 
-    def trigger_set_speed(self):
-        if self.estop_active: return
+    def on_vision_image_received(self, q_img: QImage) -> None:
+        pixmap = QPixmap.fromImage(q_img)
+        self.lbl_camera.setPixmap(
+            pixmap.scaled(self.lbl_camera.size(), Qt.KeepAspectRatio)
+        )
+        self.tab_dynamic.lbl_camera_dyn.setPixmap(
+            pixmap.scaled(self.tab_dynamic.lbl_camera_dyn.size(), Qt.KeepAspectRatio)
+        )
+
+    def trigger_set_speed(self) -> None:
+        if self.estop_active:
+            return
         self.waiting_for_speed = True
         self.ros_thread.send_trigger_measurement()
         self.tab_dynamic.lbl_dyn_status.setText(
-            "⏳ Recalculando velocidad...\nEsperando que el cubo recorra 300 mm."
+            "Recalculando velocidad lineal...\nEsperando que el cubo complete el tramo de calibración."
         )
         self.tab_dynamic.lbl_dyn_status.setStyleSheet(
             "background-color: #f39c12; color: white; padding: 10px; border-radius: 5px;"
         )
 
-    def send_joint_cmd(self):
-        if self.estop_active: return
+    def send_joint_cmd(self) -> None:
+        if self.estop_active:
+            return
         q1_deg = float(self.spin_q1.value())
         q2_deg = float(self.spin_q2.value())
         q3_deg = float(self.spin_q3.value())
         self.q_target = [q1_deg, q2_deg, q3_deg]
         self.ros_thread.send_cmd(q1_deg, q2_deg, q3_deg)
 
-    def send_cartesian_cmd(self):
-        if self.estop_active: return
+    def send_cartesian_cmd(self) -> None:
+        if self.estop_active:
+            return
         x = self.spin_x.value()
         y = self.spin_y.value()
         z = self.spin_z.value()
@@ -585,30 +731,37 @@ class MainWindow(QMainWindow):
             self.spin_q2.setValue(q_target[1])
             self.spin_q3.setValue(q_target[2])
 
-    def toggle_magnet(self):
+    def toggle_magnet(self) -> None:
         self.magnet_active = not self.magnet_active
         self.ros_thread.send_magnet(self.magnet_active)
-        self.btn_magnet.setText("🧲 ELECTROIMÁN: ENCENDIDO" if self.magnet_active else "🧲 ELECTROIMÁN: APAGADO")
+        self.btn_magnet.setText(
+            "ELECTROIMÁN: ENCENDIDO" if self.magnet_active else "ELECTROIMÁN: APAGADO"
+        )
 
-    def toggle_estop(self):
+    def toggle_estop(self) -> None:
         self.estop_active = not self.estop_active
         self.ros_thread.send_estop(self.estop_active)
-        
-        # Notificamos a la máquina de estados dinámica
         self.sm.set_estop(self.estop_active)
-        
+
         if self.estop_active:
             self.static_step = 0
             self.is_tracking_yz = False
-        
-        # Actualizamos etiquetas en todas las pestañas
-        btn_text = "🛑 E-STOP ACTIVADO" if self.estop_active else "🛑 PARADA DE EMERGENCIA (INACTIVA)"
+
+        btn_text = (
+            "PARADA DE EMERGENCIA ACTIVADA"
+            if self.estop_active
+            else "PARADA DE EMERGENCIA (INACTIVA)"
+        )
         self.btn_estop.setText(btn_text)
         self.btn_estop_planner.setText(btn_text)
-        self.btn_v_estop.setText("E-STOP ACTIVADO" if self.estop_active else "Boton de Parada")
+        self.btn_v_estop.setText(
+            "E-STOP ACTIVADO" if self.estop_active else "Boton de Parada"
+        )
         self.tab_dynamic.btn_dyn_estop.setText(self.btn_v_estop.text())
 
-    def on_feedback_received(self, q_real: list, pos_xyz: list):
+    def on_feedback_received(
+        self, q_real: List[float], pos_xyz: List[float]
+    ) -> None:
         self.q_real = q_real
         self.pos_xyz = pos_xyz
         self.sm.set_robot_pos(pos_xyz)
@@ -619,9 +772,13 @@ class MainWindow(QMainWindow):
         self.lbl_x_real.setText(f"X: {pos_xyz[0]:.2f} mm")
         self.lbl_y_real.setText(f"Y: {pos_xyz[1]:.2f} mm")
         self.lbl_z_real.setText(f"Z: {pos_xyz[2]:.2f} mm")
-        
-        self.lbl_v_q.setText(f"Q1={q_real[0]:.1f}  Q2={q_real[1]:.1f}  Q3={q_real[2]:.1f}")
-        self.lbl_v_xyz.setText(f"X={pos_xyz[0]:.1f}  Y={pos_xyz[1]:.1f}  Z={pos_xyz[2]:.1f}")
+
+        self.lbl_v_q.setText(
+            f"Q1={q_real[0]:.1f}  Q2={q_real[1]:.1f}  Q3={q_real[2]:.1f}"
+        )
+        self.lbl_v_xyz.setText(
+            f"X={pos_xyz[0]:.1f}  Y={pos_xyz[1]:.1f}  Z={pos_xyz[2]:.1f}"
+        )
         self.tab_dynamic.lbl_dyn_q.setText(self.lbl_v_q.text())
         self.tab_dynamic.lbl_dyn_xyz.setText(self.lbl_v_xyz.text())
 
@@ -629,7 +786,8 @@ class MainWindow(QMainWindow):
             self.yz_trace_y.append(pos_xyz[1])
             self.yz_trace_z.append(pos_xyz[2])
 
-    def update_plots(self):
+    def update_plots(self) -> None:
+        """Actualiza los gráficos de Matplotlib en la interfaz."""
         t_curr = time.time() - self.start_time
         self.time_history.append(t_curr)
         self.q1_real_hist.append(self.q_real[0])
@@ -641,26 +799,36 @@ class MainWindow(QMainWindow):
         self.q3_target_hist.append(self.q_target[2])
 
         if self.tabs.currentIndex() == 1:
-            ax1, ax2, ax3 = self.canvas.axes_q1, self.canvas.axes_q2, self.canvas.axes_q3
-            for ax, th, rh, label, col in [(ax1, self.q1_target_hist, self.q1_real_hist, 'Q1 (°)', 'b-'),
-                                          (ax2, self.q2_target_hist, self.q2_real_hist, 'Q2 (°)', 'g-'),
-                                          (ax3, self.q3_target_hist, self.q3_real_hist, 'Q3 (°)', 'm-')]:
+            ax1, ax2, ax3 = (
+                self.canvas.axes_q1,
+                self.canvas.axes_q2,
+                self.canvas.axes_q3,
+            )
+            for ax, th, rh, label, col in [
+                (ax1, self.q1_target_hist, self.q1_real_hist, "Q1 (°)", "b-"),
+                (ax2, self.q2_target_hist, self.q2_real_hist, "Q2 (°)", "g-"),
+                (ax3, self.q3_target_hist, self.q3_real_hist, "Q3 (°)", "m-"),
+            ]:
                 ax.cla()
-                ax.plot(self.time_history, th, 'r--')
-                ax.plot(self.time_history, rh, col)
+                ax.plot(self.time_history, th, "r--", label="Target")
+                ax.plot(self.time_history, rh, col, label="Real (AS5600)")
                 ax.set_ylabel(label)
                 ax.grid(True)
             self.canvas.draw()
 
         if self.tabs.currentIndex() == 3:
             self.canvas_yz.plot_yz(
-                self.vision_start_y, self.vision_start_z,
-                self.vision_target_y, self.vision_target_z,
-                self.yz_trace_y, self.yz_trace_z
+                self.vision_start_y,
+                self.vision_start_z,
+                self.vision_target_y,
+                self.vision_target_z,
+                self.yz_trace_y,
+                self.yz_trace_z,
             )
 
 
-def main(args=None):
+def main(args: Optional[list] = None) -> None:
+    """Punto de arranque de la aplicación GUI."""
     app = QApplication(sys.argv)
     ros_thread = ROS2Thread()
     ros_thread.start()
@@ -674,5 +842,5 @@ def main(args=None):
     sys.exit(exit_code)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

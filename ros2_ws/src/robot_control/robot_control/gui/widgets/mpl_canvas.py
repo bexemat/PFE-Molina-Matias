@@ -1,13 +1,24 @@
+"""Lienzo de graficado en tiempo real de las variables articulares en Matplotlib."""
+
+from typing import Optional
+from PyQt5.QtWidgets import QWidget
 import matplotlib
-matplotlib.use('Qt5Agg')
+
+matplotlib.use("Qt5Agg")
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 
 class MplCanvas(FigureCanvas):
-    """Lienzo de Matplotlib modular e independiente para graficar las 3 articulaciones."""
-    
-    def __init__(self, parent=None, width=5, height=6, dpi=100):
+    """Lienzo con 3 subgráficos para telemetría angular (Q1, Q2, Q3)."""
+
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        width: float = 5.0,
+        height: float = 6.0,
+        dpi: int = 100,
+    ) -> None:
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes_q1 = fig.add_subplot(311)
         self.axes_q2 = fig.add_subplot(312)

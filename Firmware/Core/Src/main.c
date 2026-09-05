@@ -2,7 +2,20 @@
 /**
   ******************************************************************************
   * @file           : main.c
-  * @brief          : Main program body (CubeMX Compatible & Preservable)
+  * @brief          : Punto de entrada de la aplicación, configuración HAL y ciclo de vida RTOS.
+  * @author         : Matías Exequiel Molina <ingenieria@uncuyo.edu.ar>
+  * @date           : 2026
+  *
+  * @details Inicializa los buses y periféricos de la placa STMicroelectronics NUCLEO-F446RE:
+  *  - **Reloj del Sistema:** PLL a 180 MHz alimentado desde oscilador interno HSI (16 MHz)[cite: 22].
+  *  - **Generación de Pasos:** Temporizadores hardware TIM13 (Q1), TIM2 (Q2) y TIM3 (Q3) en modo PWM[cite: 22].
+  *  - **Adquisición Sensorial:** I2C1 a 400 kHz (Fast-Mode) y temporizador periódico TIM7 para muestreo de encoders[cite: 22].
+  *  - **Comunicaciones Serie:** USART2 con DMA para la pila micro-ROS y USART3 para telemetría de depuración printf[cite: 22].
+  *  - **Planificador de Tareas:** Despliegue de defaultTask (micro-ROS) y mControlTask (Lazo cinemático a 100 Hz)[cite: 22].
+  *
+  * @note Estructura 100% compatible con STM32CubeMX: Respeta estrictamente los bloques
+  *       USER CODE BEGIN / USER CODE END para garantizar que la regeneración del archivo
+  *       Firmware_V_1.0.ioc no sobrescriba las implementaciones de control ni de RTOS[cite: 22].
   ******************************************************************************
   * @attention
   *
@@ -72,7 +85,10 @@ const osThreadAttr_t mControlTask_attributes = {
 };
 
 /* USER CODE BEGIN PV */
-/* Handle de Cola Cartesiana Única hacia mControlTask */
+/**
+ * @brief Cola de mensajes para transferir consignas cartesianas (X, Y, Z, T) entre tareas.
+ * @details Desacopla la recepción asíncrona en defaultTask del lazo determinista a 100 Hz en mControlTask[cite: 22].
+ */
 osMessageQueueId_t mid_PositionQueue;
 /* USER CODE END PV */
 
@@ -89,6 +105,10 @@ static void MX_I2C1_Init(void);
 static void MX_TIM7_Init(void);
 
 /* USER CODE BEGIN PFP */
+/**
+ * @brief Rutina de interrupción de temporizador para verificar la finalización de rampas P2P.
+ * @param[in,out] m Puntero al descriptor del motor asociado al temporizador interviniente.
+ */
 static void Handle_Motor_Timer_Interrupt(Motor *m);
 /* USER CODE END PFP */
 
@@ -98,8 +118,8 @@ static void Handle_Motor_Timer_Interrupt(Motor *m);
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
+  * @brief  Punto de entrada principal del microcontrolador.
+  * @retval int Código de retorno (nunca alcanzado tras el inicio del planificador de RTOS).
   */
 int main(void)
 {
@@ -109,21 +129,21 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  /* Reset de todos los periféricos, inicialización de memoria Flash y SysTick */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
 
-  /* Configure the system clock */
+  /* Configuración del árbol de reloj del sistema (180 MHz) */
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
+  /* Inicialización de controladores y periféricos mapeados por hardware */
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART2_UART_Init();
@@ -135,16 +155,16 @@ int main(void)
   MX_TIM7_Init();
 
   /* USER CODE BEGIN 2 */
-  /* Estado Inicial del Hardware y Sensores */
+  /* Inicialización del estado inicial de los sensores magnéticos absolutos (Lectura bloqueante) */
   motor1.currentAngle = readAngle_AS5600(1);
   motor2.currentAngle = readAngle_AS5600(2);
   motor3.currentAngle = readAngle_AS5600(3);
   electromagnetOn(false);
 
-  /* Timer 7 para muestreo no bloqueante I2C */
+  /* Inicio del temporizador TIM7 para disparar la máquina de adquisición no bloqueante de I2C */
   HAL_TIM_Base_Start_IT(&htim7);
 
-  /* Congelar timers durante breakpoints de debug */
+  /* Detención automática de los contadores PWM durante pausas de depuración por hardware */
   __HAL_DBGMCU_FREEZE_TIM13();
   __HAL_DBGMCU_FREEZE_TIM2();
   __HAL_DBGMCU_FREEZE_TIM3();
@@ -154,48 +174,48 @@ int main(void)
           motor1.currentAngle, motor2.currentAngle, motor3.currentAngle);
   /* USER CODE END 2 */
 
-  /* Init scheduler */
+  /* Inicialización del kernel de CMSIS-RTOS V2 */
   osKernelInitialize();
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+  /* Mutexes del sistema (reservado) */
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
+  /* Semáforos binarios y contadores (reservado) */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
+  /* Temporizadores software de FreeRTOS (reservado) */
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* Cola para consignas cartesianas (X, Y, Z + T) */
-  mid_PositionQueue = osMessageQueueNew(4, sizeof(CARTESIAN_CMD_t), NULL);
+  /* Instanciación de la cola para comandos cartesianos de trayectoria */
+  mid_PositionQueue = osMessageQueueNew(4U, sizeof(CARTESIAN_CMD_t), NULL);
   if (mid_PositionQueue == NULL) {
     printf("Error: Could not create mid_PositionQueue.\r\n");
   }
   /* USER CODE END RTOS_QUEUES */
 
-  /* Create the thread(s) */
-  /* creation of defaultTask */
+  /* Creación de tareas concurrentes */
+  /* Tarea de comunicación micro-ROS (prioridad normal) */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-  /* creation of mControlTask */
+  /* Tarea de control cinemático determinista a 100 Hz (alta prioridad) */
   mControlTaskHandle = osThreadNew(StartMotorControlTask, NULL, &mControlTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  /* Hilos de usuario adicionales (reservado) */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
+  /* Banderas de eventos (reservado) */
   /* USER CODE END RTOS_EVENTS */
 
-  /* Start scheduler */
+  /* Arranque del scheduler de FreeRTOS */
   osKernelStart();
 
-  /* We should never get here as control is now taken by the scheduler */
-  /* Infinite loop */
+  /* Bucle infinito de trampa por si el kernel cede el control */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
@@ -207,7 +227,9 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
+  * @brief Configura el árbol de reloj del sistema (System Clock Tree).
+  * @details Fuente HSI (16 MHz) -> PLL (M=8, N=180, P=2) -> SYSCLK a 180 MHz[cite: 22].
+  *          Buses periféricos: AHB = 180 MHz, APB1 = 45 MHz (Timers a 90 MHz), APB2 = 90 MHz[cite: 22].
   * @retval None
   */
 void SystemClock_Config(void)
@@ -215,14 +237,11 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the main internal regulator output voltage
-  */
+  /** Configuración del regulador interno de voltaje a máxima frecuencia (Scale 1) */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+  /** Configuración del oscilador interno HSI y multiplicación por PLL */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -238,8 +257,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
+  /** Inicialización de los relojes de buses CPU, AHB y APB */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
@@ -254,14 +272,14 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief I2C1 Initialization Function
+  * @brief Inicializa el periférico I2C1 para el bus de adquisición de encoders (Fast Mode 400 kHz).
   * @param None
   * @retval None
   */
 static void MX_I2C1_Init(void)
 {
   hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 400000; // frecuencia de 400kHz
+  hi2c1.Init.ClockSpeed = 400000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -276,7 +294,7 @@ static void MX_I2C1_Init(void)
 }
 
 /**
-  * @brief TIM2 Initialization Function
+  * @brief Inicializa el temporizador de 32 bits TIM2 para el canal PWM del Motor 2 (Hombro).
   * @param None
   * @retval None
   */
@@ -323,7 +341,7 @@ static void MX_TIM2_Init(void)
 }
 
 /**
-  * @brief TIM3 Initialization Function
+  * @brief Inicializa el temporizador de 16 bits TIM3 para el canal PWM del Motor 3 (Muñeca).
   * @param None
   * @retval None
   */
@@ -370,7 +388,7 @@ static void MX_TIM3_Init(void)
 }
 
 /**
-  * @brief TIM7 Initialization Function
+  * @brief Inicializa el temporizador básico TIM7 como base de tiempo de adquisición sensorial.
   * @param None
   * @retval None
   */
@@ -396,7 +414,7 @@ static void MX_TIM7_Init(void)
 }
 
 /**
-  * @brief TIM13 Initialization Function
+  * @brief Inicializa el temporizador de 16 bits TIM13 para el canal PWM del Motor 1 (Cintura).
   * @param None
   * @retval None
   */
@@ -430,7 +448,7 @@ static void MX_TIM13_Init(void)
 }
 
 /**
-  * @brief USART2 Initialization Function
+  * @brief Inicializa el puerto USART2 a 115200 bps para el canal de transporte serie de micro-ROS.
   * @param None
   * @retval None
   */
@@ -451,7 +469,7 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
-  * @brief USART3 Initialization Function
+  * @brief Inicializa el puerto USART3 a 115200 bps hacia el ST-LINK VCP para depuración (printf).
   * @param None
   * @retval None
   */
@@ -472,24 +490,21 @@ static void MX_USART3_UART_Init(void)
 }
 
 /**
-  * Enable DMA controller clock
+  * @brief Inicializa el controlador de acceso directo a memoria (DMA) para USART2.
   */
 static void MX_DMA_Init(void)
 {
-  /* DMA controller clock enable */
   __HAL_RCC_DMA1_CLK_ENABLE();
 
-  /* DMA interrupt init */
-  /* DMA1_Stream5_IRQn interrupt configuration */
+  /* Configuración de interrupciones para RX (Stream 5) y TX (Stream 6) */
   HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
-  /* DMA1_Stream6_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
 }
 
 /**
-  * @brief GPIO Initialization Function
+  * @brief Configura los puertos y pines GPIO de propósito general (señales DIR, MOSFET y pulsador).
   * @param None
   * @retval None
   */
@@ -497,49 +512,43 @@ static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3|GPIO_PIN_7, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5|GPIO_PIN_8, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : B1_Pin */
+  /* Pulsador de usuario azul (B1) */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PC3 PC7 */
+  /* Salidas de potencia del solenoide (PC3) y LED testigo (PC7) */
   GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA5 PA8 */
+  /* Salidas de dirección para drivers DRV8825: DIR1 (PA5) y DIR3 (PA8) */
   GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB10 */
+  /* Salida de dirección: DIR2 (PB10) */
   GPIO_InitStruct.Pin = GPIO_PIN_10;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB6 */
+  /* Entrada auxiliar PB6 */
   GPIO_InitStruct.Pin = GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
@@ -547,12 +556,26 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-/* Redirección de printf a USART3 (ST-LINK VCP) */
+/**
+ * @brief Redirección de caracteres para la salida estándar stdout/printf hacia el puerto USART3.
+ *
+ * @param[in] ch Byte/carácter a transmitir.
+ * @return int Carácter transmitido.
+ */
 int __io_putchar(int ch) {
-  HAL_UART_Transmit(&huart3, (uint8_t*) &ch, 1, HAL_MAX_DELAY);
+  HAL_UART_Transmit(&huart3, (uint8_t*) &ch, 1U, HAL_MAX_DELAY);
   return ch;
 }
 
+/**
+ * @brief Evalúa la condición de finalización de un eje durante movimientos punto a punto (P2P).
+ *
+ * @details Comprueba si la lectura del encoder magnético ha ingresado en la banda de tolerancia
+ * (ANGLE_TOLERANCE) respecto al ángulo meta. Al alcanzar la meta o ante fallo de hardware, detiene
+ * las interrupciones del timer, apaga la modulación PWM y commuta el actuador al estado IDLE[cite: 22].
+ *
+ * @param[in,out] m Puntero al descriptor del motor a inspeccionar[cite: 22].
+ */
 static void Handle_Motor_Timer_Interrupt(Motor *m) {
   switch (m->state) {
     case HOMING:
@@ -587,6 +610,17 @@ static void Handle_Motor_Timer_Interrupt(Motor *m) {
   }
 }
 
+/**
+ * @brief Callback global del HAL al completarse el periodo de cualquiera de los temporizadores activos.
+ *
+ * @details Distribuye las interrupciones periódicas:
+ *  - **TIM13, TIM2, TIM3:** Disparan el chequeo de llegada para los motores 1, 2 y 3 respectivamente[cite: 22].
+ *  - **TIM7:** Si el bus se encuentra en reposo (I2C_IDLE), inicia la lectura del siguiente encoder
+ *    en un esquema secuencial no bloqueante tipo Round-Robin (1 -> 2 -> 3 -> 1)[cite: 22].
+ *  - **TIM1:** Incrementa el contador de tiempo base (uwTick) del HAL de ST[cite: 22].
+ *
+ * @param[in] htim Puntero al manejador del temporizador que disparó la interrupción[cite: 22].
+ */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   static uint8_t sensor_index = 1;
@@ -604,7 +638,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if (i2c_state == I2C_IDLE) {
       AS5600_StartRead_IT(sensor_index);
       sensor_index++;
-      if (sensor_index > 3) sensor_index = 1;
+      if (sensor_index > 3U) sensor_index = 1U;
     }
   }
 
@@ -616,16 +650,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 /* USER CODE END 4 */
 
 /**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM1 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
-  * @retval None
-  */
-
-/**
-  * @brief  This function is executed in case of error occurrence.
+  * @brief  Manejador de excepciones críticas de hardware o inicialización fallida.
   * @retval None
   */
 void Error_Handler(void)

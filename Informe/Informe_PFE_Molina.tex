@@ -57,7 +57,7 @@
 
 \chapter{Introducción}
 \section{Contexto del Proyecto}
-El presente Proyecto Final de Estudios (PFE) constituye una evolución técnica y funcional del sistema robótico paralelo tipo "pick-and-place" desarrollado previamente por Emanuel Agüero y Agustín Lezcano. El sistema original ya integraba ROS 2 como estándar de comunicación, una base sólida que este proyecto retoma y potencia para transformar el prototipo en una celda de manufactura más robusta, escalable y alineada con las mejores prácticas de la ingeniería de software industrial.
+El presente Proyecto Final de Estudios (PFE) constituye una evolución técnica y funcional del sistema robótico paralelo tipo ``pick-and-place'' desarrollado previamente por Emanuel Agüero y Agustín Lezcano. El sistema original ya integraba ROS 2 como estándar de comunicación, una base sólida que este proyecto retoma y potencia para transformar el prototipo en una celda de manufactura más robusta, escalable y alineada con las mejores prácticas de la ingeniería de software industrial.
 
 \section{Evolución, Diagnóstico y Reingeniería del Sistema}
 La motivación principal para dar continuidad al proyecto desarrollado por Agüero y Lezcano surgió de la necesidad de evolucionar el prototipo original. El sistema heredado ya integraba clasificación por visión artificial para la manipulación de elementos comerciales, tales como rodamientos, tuercas, tornillos y llaves fijas. Sin embargo, la operación original se limitaba a un enfoque completamente estático, recogiendo las piezas dispuestas directamente sobre una superficie fija de trabajo. El objetivo de este nuevo proyecto fue dar un salto cualitativo hacia el realismo de una celda de manufactura de estándar industrial, para lo cual se diseñó e incorporó una cinta transportadora física. Esto permitió migrar hacia un sistema dinámico capaz de interceptar los objetos en continuo movimiento basándose íntegramente en la retroalimentación de la visión artificial.
@@ -255,7 +255,7 @@ En la Figura~\ref{fig:diagrama_global} se presenta la estructura global distribu
 El nivel superior opera en la computadora principal y concentra el procesamiento de visión artificial, el cálculo analítico de intercepción y la máquina de estados operativa. Al delegar la ejecución temporal de los motores al microcontrolador, el orquestador garantiza una toma de decisiones de alto nivel basada en métricas estrictas de validación.
 
 \textbf{Visión Artificial y Determinismo Espacial:}
-El módulo de visión procesa el flujo de la cámara cenital a una frecuencia constante de 30 fotogramas por segundo (actualización cada $33.3\text{ ms}$). Para aislar el cálculo de velocidad de las latencias inherentes del renderizado de la interfaz y el buffer de video, se establecieron dos compuertas espaciales de medición fijas en la entrada de la cinta ($Y_1 = -160.0\text{ mm}$ y $Y_2 = -90.0\text{ mm}$). Este tramo fijo de $70.0\text{ mm}$ garantiza un diferencial de tiempo determinista, permitiendo calcular la velocidad lineal del objeto con alta precisión. Adicionalmente, la clasificación geométrica del objeto se bloquea mediante un "cerrojo espacial" (\textit{latch}) únicamente cuando la pieza transita por el centro óptico de la cámara ($-20.0\text{ mm} \le Y \le 20.0\text{ mm}$). Esta decisión de diseño minimiza la distorsión geométrica periférica y previene falsas clasificaciones causadas por la oclusión temporal del brazo robótico durante la fase de intercepción.
+El módulo de visión procesa el flujo de la cámara cenital a una frecuencia constante de 30 fotogramas por segundo (actualización cada $33.3\text{ ms}$). Para aislar el cálculo de velocidad de las latencias inherentes del renderizado de la interfaz y el buffer de video, se establecieron dos compuertas espaciales de medición fijas en la entrada de la cinta ($Y_1 = -160.0\text{ mm}$ y $Y_2 = -90.0\text{ mm}$). Este tramo fijo de $70.0\text{ mm}$ garantiza un diferencial de tiempo determinista, permitiendo calcular la velocidad lineal del objeto con alta precisión. Adicionalmente, la clasificación geométrica del objeto se bloquea mediante un ``cerrojo espacial'' (\textit{latch}) únicamente cuando la pieza transita por el centro óptico de la cámara ($-20.0\text{ mm} \le Y \le 20.0\text{ mm}$). Esta decisión de diseño minimiza la distorsión geométrica periférica y previene falsas clasificaciones causadas por la oclusión temporal del brazo robótico durante la fase de intercepción.
 
 \textbf{Sincronización Dinámica y Filtro de Factibilidad:}
 Una vez validada la velocidad del objeto (dentro del rango operativo estipulado), el sistema calcula analíticamente el tiempo de vuelo hacia la cota de intercepción $Y_{\text{pick}}$ basándose en un modelo de Movimiento Rectilíneo Uniforme (MRU). Al tiempo resultante se le resta un factor de anticipación $T_{\text{anticipo}} = 0.15\text{ s}$. Este parámetro crítico compensa el retardo de magnetización plena del solenoide y la inercia de asentamiento de la estructura plástica, garantizando que el efector espere al objeto totalmente inmóvil y energizado fracciones de segundo antes del contacto. Como medida de seguridad térmica y mecánica, si la velocidad de la cinta exige un tiempo de intercepción inferior a $T_{\text{min}} = 0.85\text{ s}$ (límite físico de aceleración de los motores paso a paso para no perder sincronismo), la máquina de estados emite un aborto cinemático. El manipulador descarta la operación y permanece en guardia, previniendo movimientos erráticos frente a velocidades excesivas de la banda transportadora.
@@ -353,7 +353,7 @@ El envío de consignas articulares directas permite posicionar el manipulador es
 La rutina de calibración y posicionamiento inicial al origen del robot se gestiona mediante el siguiente flujo:
 \begin{itemize}
     \item \textbf{Capa de Supervisión (GUI):} Al presionar el botón de homing, la interfaz activa la señal correspondiente.
-    \item \textbf{Capa de Comunicación (ROS 2):} Se publica un mensaje de tipo booleano (`True`) a través del tópico \texttt{/microROS/homing}.
+    \item \textbf{Capa de Comunicación (ROS 2):} Se publica un mensaje de tipo booleano (`True') a través del tópico \texttt{/microROS/homing}.
     \item \textbf{Capa Embebida (micro-ROS / Firmware):} El callback \texttt{homing\_callback} recibe la orden y ejecuta la función \texttt{doAllHoming()}. Esto desplaza de forma sincronizada cada articulación hacia su ángulo de referencia de homing configurado por hardware.
 \end{itemize}
 
@@ -369,7 +369,7 @@ La manipulación y sujeción de piezas metálicas se rige por un control digital
 Ante situaciones críticas, el sistema implementa una respuesta de seguridad prioritaria:
 \begin{itemize}
     \item \textbf{Capa de Supervisión (GUI):} Al pulsar la parada de emergencia en cualquier pestaña, se emite una alerta global de interrupción.
-    \item \textbf{Capa de Comunicación (ROS 2):} El orquestador central recibe la orden y difunde un booleano (`True`) a través de los tópicos \texttt{/microROS/emergency\_stop} y \texttt{/planner/emergency\_stop}.
+    \item \textbf{Capa de Comunicación (ROS 2):} El orquestador central recibe la orden y difunde un booleano (`True') a través de los tópicos \texttt{/microROS/emergency\_stop} y \texttt{/planner/emergency\_stop}.
     \item \textbf{Capa Embebida (micro-ROS / Firmware):} El callback \texttt{estop\_callback} aborta inmediatamente cualquier trayectoria activa en curso, conmuta el estado de los motores a \texttt{MOTOR\_ERROR} y detiene de forma forzosa los PWMs de los temporizadores para desenergizar el sistema de potencia.
 \end{itemize}
 
@@ -451,7 +451,7 @@ Aplicando el Teorema del Coseno al triángulo físico formado por los eslabones 
     \gamma &= \arccos\left(\frac{D^2 + L_3^2 - L_2^2}{2 \cdot D \cdot L_3}\right)
 \end{align}
 
-Conociendo el ángulo de elevación de $D$ respecto a la horizontal, definido como $\alpha = \text{atan2}(z', r)$, los ángulos absolutos de las articulaciones quedan definidos por las siguientes expresiones, garantizando implícitamente la configuración "codo arriba":
+Conociendo el ángulo de elevación de $D$ respecto a la horizontal, definido como $\alpha = \text{atan2}(z', r)$, los ángulos absolutos de las articulaciones quedan definidos por las siguientes expresiones, garantizando implícitamente la configuración ``codo arriba'':
 
 \begin{align}
     Q_2 &= \alpha + \beta \\
@@ -794,7 +794,7 @@ Para evaluar el desempeño global de la celda de manufactura, se definieron los 
 
 \section{Caso de Uso 1: Pick-and-Place Estático con Retroalimentación Visual}
 \subsection{Descripción del Escenario}
-Se dispuso el objeto en coordenadas cartesianas alternadas conocidas dentro del espacio de trabajo sobre la cinta detenida ($X = 220\text{ mm}$, $Z = 78\text{ mm}$, $Y \in [+10, +140]\text{ mm}$). Se realizaron 30 repeticiones evaluando el error posicional euclídeo de agarre y el tiempo total de ciclo.
+Se dispuso el objeto en coordenadas cartesianas alternadas conocidas dentro del espacio de trabajo sobre la cinta detenida ($X = 220\text{ mm}$, $Z = 78\text{ mm}$, $Y \in [+10, +140]\text{ mm}$). Se realizaron 23 repeticiones evaluando el error posicional euclídeo de agarre y el tiempo total de ciclo.
 
 \subsection{Resultados Cuantitativos y Registro Experimental}
 En la Tabla~\ref{tab:registro_estatico_manual} se detalla el registro empírico de las corridas experimentales correspondientes a la evaluación estática con retroalimentación visual ($N = 23$), consignando la coordenada longitudinal objetivo ($Y_{\text{pick}}$), el éxito en la fase de agarre (\textit{Pick}), la fase de depósito (\textit{Place}) y la clasificación morfológica obtenida.
@@ -804,30 +804,30 @@ En la Tabla~\ref{tab:registro_estatico_manual} se detalla el registro empírico 
 \small
 \begin{tabular}{|c|c|c|c|l|}
 \hline
-\textbf{Nº} & \textbf{$Y_{\text{pick}}$ [mm]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} \\ \hline
-1  & 39    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-2  & 12,9  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-3  & 92,2  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-4  & 80    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-5  & 140   & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-6  & 52,3  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-7  & 118,5 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-8  & 13,2  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-9  & 116,7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-10 & 73    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-11 & 31    & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-12 & 113   & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-13 & 12,3  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-14 & 91,5  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-15 & 22,3  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-16 & 118,7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-17 & 144   & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-18 & 10    & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-19 & 23,7  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-20 & 72,5  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-21 & 75,2  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
-22 & 129,3 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
-23 & 132,7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+\textbf{N$^\circ$} & \textbf{$Y_{\text{pick}}$ [mm]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} \\ \hline
+1  & 39.0  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+2  & 12.9  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+3  & 92.2  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+4  & 80.0  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+5  & 140.0 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+6  & 52.3  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+7  & 118.5 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+8  & 13.2  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+9  & 116.7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+10 & 73.0  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+11 & 31.0  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+12 & 113.0 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+13 & 12.3  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+14 & 91.5  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+15 & 22.3  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+16 & 118.7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+17 & 144.0 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+18 & 10.0  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+19 & 23.7  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+20 & 72.5  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+21 & 75.2  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
+22 & 129.3 & $\checkmark$ & $\checkmark$ & Cono \\ \hline
+23 & 132.7 & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
 \end{tabular}
 \caption{Registro experimental detallado de los ensayos de Pick-and-Place estático ($N = 23$).}
 \label{tab:registro_estatico_manual}
@@ -844,50 +844,50 @@ En la Tabla~\ref{tab:registro_dinamico_completo} se detalla el registro empíric
 \scriptsize
 \begin{tabular}{|c|c|c|c|l|p{5.2cm}|}
 \hline
-\textbf{Nº} & \textbf{V [mm/s]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} & \textbf{Observaciones / Diagnóstico} \\ \hline
-1 & 85.0 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-2 & 98.4 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-3 & 90.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-4 & 71.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-5 & — & $\times$ & $\checkmark$ & Cono & Fallo en toma de V / Fallo de agarre \\ \hline
-6 & 84.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-7 & 79.1 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-8 & 90.7 & $\checkmark$ & $\times$ & Cono & Error de clasificación: depósito en caja errónea \\ \hline
-9 & 96.0 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-10 & 89.7 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-11 & 76.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-12 & 91.7 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-13 & 79.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-14 & 92.7 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-15 & 89.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-16 & 77.3 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-17 & 70.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-18 & 75.4 & — & — & — & Atasco mecánico de cinta \\ \hline
-19 & 89.7 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-20 & 91.4 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+\textbf{N$^\circ$} & \textbf{V [mm/s]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} & \textbf{Observaciones / Diagnóstico} \\ \hline
+1  & 85.0  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+2  & 98.4  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+3  & 90.6  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+4  & 71.6  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+5  & ---   & $\times$     & $\checkmark$ & Cono & Fallo en toma de V / Fallo de agarre \\ \hline
+6  & 84.9  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+7  & 79.1  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+8  & 90.7  & $\checkmark$ & $\times$     & Cono & Error de clasificación: depósito en caja errónea \\ \hline
+9  & 96.0  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+10 & 89.7  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+11 & 76.6  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+12 & 91.7  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+13 & 79.9  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+14 & 92.7  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+15 & 89.6  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+16 & 77.3  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+17 & 70.9  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+18 & 75.4  & ---          & ---          & ---  & Atasco mecánico de cinta \\ \hline
+19 & 89.7  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+20 & 91.4  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
 21 & 100.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-22 & — & — & — & — & Atasco mecánico de cinta \\ \hline
-23 & 83.9 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-24 & 87.1 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-25 & 71.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-26 & 87.3 & $\times$ & $\checkmark$ & — & Fallo de agarre magnético \\ \hline
+22 & ---   & ---          & ---          & ---  & Atasco mecánico de cinta \\ \hline
+23 & 83.9  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+24 & 87.1  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+25 & 71.6  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+26 & 87.3  & $\times$     & $\checkmark$ & ---  & Fallo de agarre magnético \\ \hline
 27 & 117.0 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa a alta velocidad \\ \hline
 28 & 101.6 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-29 & 70.7 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-30 & 84.3 & $\checkmark$ & $\times$ & Cono & Error de clasificación: depósito en caja errónea \\ \hline
-31 & 75.1 & $\checkmark$ & $\times$ & Cubo & Error de clasificación: depósito en caja errónea \\ \hline
-32 & 78.1 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-33 & 82.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-34 & 76.2 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-35 & — & — & — & — & Fallo en visión (objeto fuera de ROI) \\ \hline
-36 & 104.0 & $\checkmark$ & $\times$ & Cubo & Error de clasificación: depósito en caja errónea \\ \hline
+29 & 70.7  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+30 & 84.3  & $\checkmark$ & $\times$     & Cono & Error de clasificación: depósito en caja errónea \\ \hline
+31 & 75.1  & $\checkmark$ & $\times$     & Cubo & Error de clasificación: depósito en caja errónea \\ \hline
+32 & 78.1  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+33 & 82.6  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+34 & 76.2  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+35 & ---   & ---          & ---          & ---  & Fallo en visión (objeto fuera de ROI) \\ \hline
+36 & 104.0 & $\checkmark$ & $\times$     & Cubo & Error de clasificación: depósito en caja errónea \\ \hline
 37 & 103.4 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-38 & 84.0 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-39 & 70.3 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
-40 & 101.7 & $\times$ & $\checkmark$ & — & Fallo de agarre magnético \\ \hline
-41 & 79.8 & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
-42 & 91.0 & $\checkmark$ & $\times$ & Cono & Error de clasificación: depósito en caja errónea \\ \hline
-43 & 76.6 & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+38 & 84.0  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+39 & 70.3  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
+40 & 101.7 & $\times$     & $\checkmark$ & ---  & Fallo de agarre magnético \\ \hline
+41 & 79.8  & $\checkmark$ & $\checkmark$ & Cono & Operación exitosa \\ \hline
+42 & 91.0  & $\checkmark$ & $\times$     & Cono & Error de clasificación: depósito en caja errónea \\ \hline
+43 & 76.6  & $\checkmark$ & $\checkmark$ & Cubo & Operación exitosa \\ \hline
 \end{tabular}
 \caption{Registro experimental detallado de los ensayos de intercepción dinámica ($N = 43$).}
 \label{tab:registro_dinamico_completo}
@@ -925,9 +925,9 @@ Fallo en agarre / sincronismo inicial (\textit{Pick} $\times$) & 3 & 7.5\% \\
 \section{Registro Audiovisual y Demostraciones}
 Para facilitar la evaluación externa y la verificación experimental de los resultados obtenidos, los registros audiovisuales de los ensayos se encuentran disponibles en el repositorio multimedia institucional del proyecto:
 \begin{itemize}
-    \item \textbf{Video Anexo 1 (Pick-and-Place Estático):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQAEfuTCPxe3T4dsjXcwBnaGAX35Iyutr4qPirEA1u29M0E?e=xh17bC&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiIwYjc5ZTc4OC1jYmUwLTQ1OWYtOTJlZi04ZTNkYzM1Yjc1MjcifX0%3D}{Acceso al registro audiovisual del Caso 1 (SharePoint / OneDrive UNCUYO)},exhibiendo la calibración óptica, repetibilidad milimétrica y validación del lazo cerrado de visión.
+    \item \textbf{Video Anexo 1 (Pick-and-Place Estático):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQAEfuTCPxe3T4dsjXcwBnaGAX35Iyutr4qPirEA1u29M0E?e=xh17bC&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiIwYjc5ZTc4OC1jYmUwLTQ1OWYtOTJlZi04ZTNkYzM1Yjc1MjcifX0%3D}{Acceso al registro audiovisual del Caso 1 (SharePoint / OneDrive UNCUYO)}, exhibiendo la calibración óptica, repetibilidad milimétrica y validación del lazo cerrado de visión.
     \item \textbf{Video Anexo 2 (Intercepción Dinámica Continua V2):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQDCwvXBABLkS5B_CfnKQVsbAdtK2KCxrWGJi_acs33pOqM?e=9aRyCH&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiI4ODBjNjM5OC1jZDcyLTQ0OWEtODJmOS0wZWQwMWY2ZGIxMjIifX0%3D}{Acceso al registro audiovisual del Caso 2 (SharePoint / OneDrive UNCUYO)}, exhibiendo la detección en compuertas espaciales, sincronización temporal MRU, intercepción en movimiento, elevación vertical pura ($Z_{\text{lift}}$) y descarga clasificada.
-    \item \textbf{Video Anexo 3 (Failsafe y Retorno Rápido):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQC4HhHrg-AMSam3l6sVpuQnAaCE1OA0pd9p2rAQQmxLEsE?e=YsTjAv&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiIzNzNjZGEwNS04NGYwLTQ2MTYtYTJjNi1kNDBiYjBlMGJkYjkifX0%3D}{Acceso al registro audiovisual del Caso 3 (SharePoint / OneDrive UNCUYO)} Validación del comportamiento determinista de la máquina de estados ante desprendimiento de pieza y rechazo cinemático por exceso de velocidad.
+    \item \textbf{Video Anexo 3 (Failsafe y Retorno Rápido):} \href{https://universidadcuyo-my.sharepoint.com/:v:/g/personal/molina_matias_uncuyo_edu_ar/IQC4HhHrg-AMSam3l6sVpuQnAaCE1OA0pd9p2rAQQmxLEsE?e=YsTjAv&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbE1vZGUiOiJtaXMiLCJyZWZlcnJhbFZpZXciOiJwb3N0cm9sbC1jb3B5bGluayIsInJlZmVycmFsUGxheWJhY2tTZXNzaW9uSWQiOiIzNzNjZGEwNS04NGYwLTQ2MTYtYTJjNi1kNDBiYjBlMGJkYjkifX0%3D}{Acceso al registro audiovisual del Caso 3 (SharePoint / OneDrive UNCUYO)}: validación del comportamiento determinista de la máquina de estados ante desprendimiento de pieza y rechazo cinemático por exceso de velocidad.
 \end{itemize}
 
 \chapter{Conclusiones, Limitaciones y Trabajos Futuros}
