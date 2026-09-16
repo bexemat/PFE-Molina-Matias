@@ -1,19 +1,19 @@
-"""Máquina de estados finita determinista (FSM V2) para intercepción dinámica continua[cite: 40].
+"""Máquina de estados finita determinista (FSM V2) para intercepción dinámica continua.
 
 Coordina el ciclo dinámico autónomo evaluando factibilidad cinemática en tiempo real,
 sincronizando el instante de arribo con el perfil quíntico generado en el microcontrolador
-y gestionando el protocolo de estados del planificador (/planner/traj_status)[cite: 40].
+y gestionando el protocolo de estados del planificador (/planner/traj_status).
 
 Estados del Autómata:
-    0: IDLE / Sistema detenido o en espera de inicio[cite: 40].
-    1: Traslado articular hacia posición de guardia nominal[cite: 40].
-    2: En guardia validada (±2.0 mm) | Imán ON | Espera de objeto en cinta[cite: 40].
-    4: Intercepción síncrona en movimiento quíntico continuo[cite: 40].
-    45: Elevación vertical pura (Vertical Lift) para mitigar fuerzas de corte[cite: 40].
-    5: Desplazamiento elevado hacia tolva de descarga según clasificación[cite: 40].
-    6: Descenso final y corte de excitación magnética[cite: 40].
-    7: Retorno veloz a guardia tras depósito o falla de sujeción[cite: 40].
-    8: Descarte de intercepción por inviabilidad dinámica (velocidad excesiva)[cite: 40].
+    0: IDLE / Sistema detenido o en espera de inicio.
+    1: Traslado articular hacia posición de guardia nominal.
+    2: En guardia validada (±2.0 mm) | Imán ON | Espera de objeto en cinta.
+    4: Intercepción síncrona en movimiento quíntico continuo.
+    45: Elevación vertical pura (Vertical Lift) para mitigar fuerzas de corte.
+    5: Desplazamiento elevado hacia tolva de descarga según clasificación.
+    6: Descenso final y corte de excitación magnética.
+    7: Retorno veloz a guardia tras depósito o falla de sujeción.
+    8: Descarte de intercepción por inviabilidad dinámica (velocidad excesiva).
 """
 
 from typing import List

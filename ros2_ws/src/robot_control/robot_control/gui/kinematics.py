@@ -6,9 +6,9 @@ la horizontalidad del efector final, suprimiendo la necesidad de parametrizació
 convencional y reduciendo el cómputo a un sistema desacoplado de 3 GDL puramente posicional.
 
 Restricciones articulares operativas:
-    - Q1 (Cintura): [-90.0°, +90.0°] - Rotación azimutal base[cite: 39].
-    - Q2 (Hombro):  [+20.0°, +157.0°] - Elevación del brazo (cota 20° requerida para Y = -140 mm)[cite: 39, 48].
-    - Q3 (Muñeca):  [-75.0°, +25.0°] - Posicionamiento de antebrazo[cite: 39].
+    - Q1 (Cintura): [-90.0°, +90.0°] - Rotación azimutal base.
+    - Q2 (Hombro):  [+20.0°, +157.0°] - Elevación del brazo (cota 20° requerida para Y = -140 mm).
+    - Q3 (Muñeca):  [-75.0°, +25.0°] - Posicionamiento de antebrazo.
 """
 
 from typing import List, Tuple

@@ -1,16 +1,16 @@
-"""Capa de adaptación concurrente entre el middleware ROS 2 y el entorno PyQt5[cite: 42].
+"""Capa de adaptación concurrente entre el middleware ROS 2 y el entorno PyQt5.
 
 Implementa el patrón de arquitectura Worker Thread (QThread) para alojar el ejecutor
-bloqueante rclpy.spin() en un hilo secundario independiente[cite: 42]. Toda la telemetría,
+bloqueante rclpy.spin() en un hilo secundario independiente. Toda la telemetría,
 estados del planificador y flujos de visión se canalizan al hilo principal de Qt
 a través de señales deterministas (pyqtSignal), previniendo bloqueos en el renderizado
-y eliminando problemas de concurrencia en la GUI[cite: 42].
+y eliminando problemas de concurrencia en la GUI.
 
 Arquitectura de Señales:
-    - feedback_received (list, list): Transmite [q1, q2, q3] y [x, y, z] leídos[cite: 42].
-    - planner_status_received (int): Código de estado del firmware STM32[cite: 42].
-    - vision_dynamic_target_received (list): Vector [vel_mm_s, y_actual, flag][cite: 42].
-    - vision_image_received (QImage): Cuadro de video transformado a formato Qt[cite: 42].
+    - feedback_received (list, list): Transmite [q1, q2, q3] y [x, y, z] leídos.
+    - planner_status_received (int): Código de estado del firmware STM32.
+    - vision_dynamic_target_received (list): Vector [vel_mm_s, y_actual, flag].
+    - vision_image_received (QImage): Cuadro de video transformado a formato Qt.
 """
 
 from typing import List, Tuple, Optional

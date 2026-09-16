@@ -1,21 +1,21 @@
 """Nodo de percepción visual cenital para seguimiento continuo y clasificación geométrica.
 
-Este nodo procesa el flujo de captura a 30 FPS sobre la cinta transportadora en espacio HSV[cite: 48].
+Este nodo procesa el flujo de captura a 30 FPS sobre la cinta transportadora en espacio HSV.
 Resuelve tres tareas concurrentes:
     1. Transformación métrica cuadrática: Compensación de distorsión de perspectiva y lente
-       mediante un modelo polinómico de segundo orden Y_robot = f(cx_px)[cite: 48].
+       mediante un modelo polinómico de segundo orden Y_robot = f(cx_px).
     2. Estimación de velocidad lineal: Registro de tiempos de cruce entre compuertas
-       espaciales fijas (Y_GATE_1 y Y_GATE_2) utilizando marcas de tiempo de alta precisión[cite: 48].
+       espaciales fijas (Y_GATE_1 y Y_GATE_2) utilizando marcas de tiempo de alta precisión.
     3. Clasificación morfológica invariante: Discriminación geométrica entre prismas rectangulares
        (Cubo) y conos truncados (Cono) combinando densidad superficial (Extent) y relación
-       de áreas ortogonales vs. rotadas (Rect Ratio)[cite: 48].
+       de áreas ortogonales vs. rotadas (Rect Ratio).
 
 Interfaces ROS 2:
     Publicadores:
-        - /detected_object_pose (geometry_msgs/Point): Pose cartesiana estática [X_FIXED, Y, Z_FIXED][cite: 48].
-        - /detected_object_dynamic_pose (geometry_msgs/Point): Vector dinámico [Velocidad, Y_actual, Flag_medido][cite: 48].
-        - /vision/object_class (std_msgs/Int8): Identificador de clase (1: Cubo, 2: Cono)[cite: 48].
-        - /vision/image_annotated (sensor_msgs/Image): Flujo anotado para renderizado en GUI[cite: 48].
+        - /detected_object_pose (geometry_msgs/Point): Pose cartesiana estática [X_FIXED, Y, Z_FIXED].
+        - /detected_object_dynamic_pose (geometry_msgs/Point): Vector dinámico [Velocidad, Y_actual, Flag_medido].
+        - /vision/object_class (std_msgs/Int8): Identificador de clase (1: Cubo, 2: Cono).
+        - /vision/image_annotated (sensor_msgs/Image): Flujo anotado para renderizado en GUI.
 """
 
 from typing import Optional

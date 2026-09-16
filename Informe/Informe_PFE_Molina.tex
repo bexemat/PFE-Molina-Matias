@@ -652,7 +652,7 @@ Genera perfiles suaves con velocidad y aceleración nulas en extremos:
 
 \paragraph{\texttt{kinematics.c}, \texttt{motors.c} y \texttt{as5600\_tca9548.c}}
 \begin{itemize}
-    \item \textbf{\texttt{kinematics.c}:} Geometría de cuatro barras: $L_1 = 77.0\text{ mm}$, $L_2 = 135.0\text{ mm}$, $L_3 = 147.0\text{ mm}$, $O_r = 25.49\text{ mm}$, $O_z = 40.87\text{ mm}$. Límites articulares de seguridad: $Q_1 \in [-90^\circ, 90^\circ]$, $Q_2 \in [40^\circ, 157^\circ]$, $Q_3 \in [-75^\circ, 25^\circ]$.
+    \item \textbf{\texttt{kinematics.c}:} Geometría de cuatro barras: $L_1 = 77.0\text{ mm}$, $L_2 = 135.0\text{ mm}$, $L_3 = 147.0\text{ mm}$, $O_r = 25.49\text{ mm}$, $O_z = 40.87\text{ mm}$. Límites articulares de seguridad unificados estrictamente con el hardware: $Q_1 \in [-90^\circ, 90^\circ]$, $Q_2 \in [20^\circ, 157^\circ]$ (cota inferior requerida para alcanzar la cota lejana en $Y = -140.0\text{ mm}$), $Q_3 \in [-75^\circ, 25^\circ]$.
     \item \textbf{\texttt{motors.c}:} Ley $v_{cmd} = \dot{q}_{ref} + 3.5(q_{ref} - q_{real})$ traducida a pulsos PWM al 50\% de ciclo de trabajo.
     \item \textbf{\texttt{as5600\_tca9548.c}:} Muestreo I2C Fast-Mode (400 kHz) por TIM7 en Round-Robin ($1 \rightarrow 2 \rightarrow 3$) con filtro de rechazo $> 180^\circ$.
 \end{itemize}
@@ -718,7 +718,7 @@ En la Figura~\ref{fig:diagrama_global} se presenta la estructura global distribu
         \textbf{ROS2Thread} (rclpy Node)
     };
     \node [bluebox, text width=4.1cm] (ui) at (4.5, -2.7) {
-        \textbf{robot\_ui\_node\_2} (PyQt5)
+        \textbf{robot\_ui\_node} (PyQt5)
     };
     \node [bluebox, text width=4.1cm] (sm) at (4.5, -4.05) {
         \textbf{PickAndPlaceSMV2} (FSM)
@@ -789,7 +789,6 @@ El nivel superior opera en la computadora principal y concentra el procesamiento
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}[
-        % Estilo general para los bloques (con sombra)
         block/.style={
             rectangle, 
             draw=black!85, 
@@ -801,19 +800,16 @@ El nivel superior opera en la computadora principal y concentra el procesamiento
             inner sep=8pt,
             drop shadow={shadow xshift=2pt, shadow yshift=-2pt, opacity=0.25}
         },
-        % Estilo para las flechas de una sola dirección
         arrow/.style={
             thick, 
             ->, 
             >=stealth
         },
-        % NUEVO: Estilo para las flechas bidireccionales
         biarrow/.style={
             thick, 
             <->, 
             >=stealth
         },
-        % Estilo para las etiquetas
         labelbox/.style={
             fill=gray!25, 
             font=\small, 
@@ -823,7 +819,6 @@ El nivel superior opera en la computadora principal y concentra el procesamiento
         }
     ]
 
-        % Nodos alineados por coordenadas
         \node[block] (vision) at (0, 0) {Modulo de Vision OpenCV 30\\FPS};
         
         \node[block] (ros) at (0, -2.2) {Lazo ROS 2 ros\_thread.py};
@@ -832,22 +827,16 @@ El nivel superior opera en la computadora principal y concentra el procesamiento
         
         \node[block] (fsm) at (0, -7.4) {Maquina de Estados\\PickAndPlaceSMV2};
 
-        % --- CONEXIONES ---
-
-        % 1. Visión -> Lazo ROS 2 (Unidireccional)
         \draw[arrow] (vision.south) -- node[labelbox] {Pose, Velocidad y Clase} (ros.north);
         
-        % 2. Lazo ROS 2 <-> Interfaz Gráfica (Bidireccional)
         \draw[biarrow] ([xshift=-1.2cm]ros.south) 
               to[out=-90, in=90] 
               node[labelbox, pos=0.45] {Senales Qt / Comandos} (gui.north);
         
-        % 3. Interfaz Gráfica <-> Máquina de Estados (Bidireccional)
         \draw[biarrow] (gui.south) 
               to[out=-90, in=90] 
               node[labelbox, pos=0.55] {Transiciones de Estado} ([xshift=-1.2cm]fsm.north);
 
-        % 4. Máquina de Estados -> Lazo ROS 2 (Unidireccional curva)
         \draw[arrow] ([xshift=1.2cm]fsm.north) 
               to[bend right=45] 
               node[labelbox, pos=0.5] {send\_ctraj\_cmd /\\send\_magnet} ([xshift=1.2cm]ros.south);
@@ -867,12 +856,12 @@ Este nodo opera a 30 FPS en espacio de color HSV, asumiendo las siguientes respo
     \begin{equation}
         Y_{robot}\text{ [mm]} = a \cdot c_x^2 + b \cdot c_x + c
     \end{equation}
-    donde $a = 7.7532 \times 10^{-5}$, $b = 0.5865$ y $c = -185.7812$. El eje transversal de la cinta se encuentra posicionado en $X_{\text{FIXED}} = 215.0\text{ mm}$ y la altura de contacto en $Z_{\text{FIXED}} = 78.0\text{ mm}$.
+    donde $a = 2.78487 \times 10^{-5}$, $b = 0.599751$ y $c = -193.5176$. El eje transversal de la cinta se encuentra posicionado en $X_{\text{FIXED}} = 215.0\text{ mm}$ y la altura de contacto en $Z_{\text{FIXED}} = 76.0\text{ mm}$.
     
     \item \textbf{Estimación Lineal de Velocidad por Compuertas Fijas:}
-    Configura dos barreras espaciales transversales a la cinta: $Y_{G1} = -160.0\text{ mm}$ y $Y_{G2} = -90.0\text{ mm}$ ($\Delta Y = 70.0\text{ mm}$). Al cruzar la pieza $Y_{G1}$, registra la marca de tiempo de alta resolución $t_1$ (\texttt{time.perf\_counter()}). Al cruzar $Y_{G2}$, calcula la velocidad escalar:
+    Configura dos barreras espaciales transversales a la cinta: $Y_{G1} = -140.0\text{ mm}$ y $Y_{G2} = -70.0\text{ mm}$ ($\Delta Y = 70.0\text{ mm}$). Al cruzar la pieza $Y_{G1}$, registra la marca de tiempo de alta resolución $t_1$ (\texttt{time.perf\_counter()}) junto a la coordenada observada $y_1$. Al cruzar $Y_{G2}$, calcula la velocidad escalar determinista a partir del desplazamiento real observado:
     \begin{equation}
-        v_{cinta} = \frac{Y_{actual} - Y_{G1}}{t_2 - t_1} \quad [\text{mm/s}]
+        v_{cinta} = \frac{y_2 - y_1}{t_2 - t_1} \quad [\text{mm/s}]
     \end{equation}
     publicando el vector $(v_{cinta}, Y_{actual}, flag_{medido})$ en el tópico \texttt{/detected\_object\_dynamic\_pose}.
 
@@ -896,13 +885,13 @@ Orquesta las transiciones operativas mediante un autómata finito de estados con
     \begin{equation}
         T_{\text{MIN\_ROBOT}} = \max\left(0.60\text{ s}, \, \max_{i \in \{1,2,3\}} \frac{1.875 \cdot |\Delta q_i| \cdot \text{DEG\_TO\_STEPS} \cdot i_{red}[i]}{850\text{ Hz}}\right)
     \end{equation}
-    En caso factible ($t_{disp} \ge T_{\text{MIN\_ROBOT}}$), conmuta al estado de intercepción despachando la consigna con duración $t_{disp}$. En caso no factible ($t_{disp} < T_{\text{MIN\_ROBOT}}$), conmuta a aborto preventivo notificando velocidad excesiva en pantalla sin mover el robot.
+    Para el trayecto completo nominal desde la guardia ($X=215, Y=-75, Z=100\text{ mm}$) hasta la intercepción ($X=215, Y=120, Z=76\text{ mm}$), este cálculo arroja $T_{\text{MIN\_ROBOT}} \approx 0.85\text{ s}$. Si la velocidad observada impone un tiempo disponible menor ($t_{disp} < T_{\text{MIN\_ROBOT}}$), la máquina de estados aborta preventivamente la intercepción. Esto evita que el manipulador inicie trayectorias inviables donde los motores perderían sincronismo al intentar acelerar por encima de $850\text{ Hz}$.
     
     \item \textbf{Manejo del Protocolo de Estados de Trayectoria:}
     Los códigos de retorno del firmware coordinan las transiciones: códigos de falla o parada por software ($\le -1$) desenergizan el electroimán y abortan el ciclo; el código de ejecución activa ($1$) mantiene la espera; y los códigos de éxito o fin de guarda ($2$ y $3$) habilitan el avance hacia el despegue vertical a $Z = 125\text{ mm}$, verificación óptica y descarga en contenedores clasificados.
 \end{itemize}
 
-\paragraph{\texttt{ros\_thread.py} y \texttt{robot\_ui\_node\_2.py} --- Desacoplamiento Gráfico}
+\paragraph{\texttt{ros\_thread.py} y \texttt{robot\_ui\_node.py} --- Desacoplamiento Gráfico}
 Aloja el ejecutor bloqueante \texttt{rclpy.spin()} en un hilo secundario (\texttt{QThread}), evitando degradar el renderizado visual de la GUI a 60 FPS. Mapea callbacks de tópicos ROS 2 hacia señales tipificadas de Qt: telemetría articular a 40 Hz (\texttt{feedback\_received}), eventos de finalización de trayectoria (\texttt{planner\_status\_received}), paquetes de tracking y velocidad (\texttt{vision\_dynamic\_target\_received}) y transmisión de fotogramas (\texttt{vision\_image\_received}). La interfaz principal integra la visualización de la clasificación en tiempo real, estimación de velocidad, monitor de estados y parada por software.
 
 \paragraph{\texttt{publisher.py} --- Enrutador Puente de Hardware y Arbitraje}
@@ -1333,9 +1322,6 @@ Esta posición en píxeles es convertida a coordenadas métricas utilizando el m
 \label{fig:curva_calibracion_experimental}
 \end{figure}
 
-    
-
-
 \subsection{Test Experimental y Análisis de Dispersión del Sistema de Visión}
 Para cuantificar rigurosamente la precisión métrica del nodo de visión una vez implementado el ajuste polinómico cuadrático, se desarrolló una serie de pruebas sistemáticas directamente sobre la maqueta física de la celda, basándose en la captura de $N = 15$ puntos de control distribuidos longitudinalmente sobre la cinta transportadora.
 
@@ -1378,6 +1364,7 @@ A partir de la serie completa de los 15 puntos registrados experimentalmente, se
 \end{itemize}
 
 Los resultados cuantitativos demuestran que la dispersión del sistema de visión se mantiene dentro de una cota submilimétrica en la región central del campo visual y no supera $1.70\text{ mm}$ en los extremos del área de trabajo. Esta baja dispersión ($\sigma = 0.73\text{ mm}$) certifica la alta repetibilidad del nodo de visión y valida la suficiencia del modelo cuadrático para mitigar la distorsión óptica de la lente cenital, asegurando un posicionamiento altamente compatible con la tolerancia de agarre del efector magnético.
+
 \subsection{Clasificación Geométrica de Objetos Invariante a la Rotación}
 Para habilitar la capacidad de clasificación del sistema, se integró un algoritmo capaz de discriminar entre distintas geometrías de piezas que comparten el mismo color (en este caso, un cubo y un cono truncado de color rosa).
 
@@ -1423,7 +1410,7 @@ Con el fin de centralizar la supervisión y operación de la celda robótica, se
         \label{fig:gui_pestana1}
     \end{figure}
     
-    \item \textbf{Pestaña 4 (Pick Estático):} Destinada a la validación de la celda de clasificación con piezas en reposo (ver Figura~\ref{fig:gui_pestana4}). El módulo de visión artificial detecta un cubo de referencia de $20\text{ mm}$ de lado ($20\times 20\times 20\text{ mm}$) de color rosa y transmite un vector de posición cartesiano $(x, y, z)$ hacia el planificador embebido. Las coordenadas nominales efectivas se establecieron en la cota $Z = 78.0\text{ mm}$ y posición longitudinal de cinta $X = 215.0\text{ mm}$.
+    \item \textbf{Pestaña 4 (Pick Estático):} Destinada a la validación de la celda de clasificación con piezas en reposo (ver Figura~\ref{fig:gui_pestana4}). El módulo de visión artificial detecta un cubo de referencia de $20\text{ mm}$ de lado ($20\times 20\times 20\text{ mm}$) de color rosa y transmite un vector de posición cartesiano $(x, y, z)$ hacia el planificador embebido. Las coordenadas nominales efectivas se establecieron en la cota $Z = 76.0\text{ mm}$ y posición longitudinal de cinta $X = 215.0\text{ mm}$.
 
     \begin{figure}[H]
         \centering
@@ -1445,20 +1432,16 @@ Con el fin de centralizar la supervisión y operación de la celda robótica, se
         donde $Y_{pick}$ ($120\text{ mm}$) representa la coordenada longitudinal fija de intercepción, y $T_{anticipo}$ ($0.15\text{ s}$) compensa el retardo de saturación magnética del solenoide. Siempre que el $t_{objetivo}$ respetara el límite de aceleración física del robot ($t \ge 0.85\text{ s}$), se generaba una trayectoria polinómica quíntica que sincronizaba temporal y espacialmente el contacto entre el cabezal y la pieza.
     \end{enumerate}
 
- 
     \begin{figure}[H]
         \centering
         \begin{tikzpicture}[
-            % Definición de distancias entre nodos
             node distance=0.7cm and 1cm,
-            % Estilos de las cajas y flechas
             process/.style={rectangle, draw=gray!80!black, thick, minimum width=4.5cm, minimum height=1cm, text centered, font=\sffamily\small, align=center},
             decision/.style={diamond, draw=gray!80!black, thick, minimum width=4.5cm, minimum height=1.5cm, text centered, font=\sffamily\small, align=center, aspect=1.5},
             arrow/.style={thick, ->, >=Stealth, draw=black},
             labelbox/.style={fill=gray!30, inner sep=2pt, font=\sffamily\scriptsize}
             ]
 
-            % Nodos
             \node (start) [process] {Inicio: Visión / GUI};
             \node (btnvel) [process, below=of start] {Botón: Medir Velocidad};
             \node (camara) [process, below=of btnvel] {Cámara detecta recorrido \\ de 290 mm};
@@ -1471,7 +1454,6 @@ Con el fin de centralizar la supervisión y operación de la celda robótica, se
             \node (tomar) [process, below=of detecta] {Tomar coordenada Y0 y \\ calcular tiempo};
             \node (enviar) [process, below=of tomar] {Enviar tiempo al \\ microcontrolador para \\ mover el brazo};
 
-            % Conexiones (Flechas principales)
             \draw [arrow] (start) -- (btnvel);
             \draw [arrow] (btnvel) -- (camara);
             \draw [arrow] (camara) -- (vmed);
@@ -1481,9 +1463,7 @@ Con el fin de centralizar la supervisión y operación de la celda robótica, se
             \draw [arrow] (posini) -- (solenoide);
             \draw [arrow] (solenoide) -- (detecta);
 
-            % Conexiones de decisión
             \draw [arrow] (detecta) -- node[labelbox] {Sí} (tomar);
-            % Flecha de retorno curva para el "No"
             \draw [arrow] (detecta.140) to[bend left=20] node[labelbox, right, pos=0.4] {No} (solenoide.220);
 
             \draw [arrow] (tomar) -- (enviar);
@@ -1492,7 +1472,6 @@ Con el fin de centralizar la supervisión y operación de la celda robótica, se
         \caption{Diagrama de flujo del proceso de visión y control.}
         \label{fig:diagrama_flujo}
     \end{figure}
-
 
     \begin{figure}[H]
         \centering
@@ -1503,20 +1482,20 @@ Con el fin de centralizar la supervisión y operación de la celda robótica, se
 \end{itemize}
 
 \section{Evolución hacia el Modo Dinámico Continuo en 1 Paso (V2)}
-Para superar la dependencia del operador y optimizar los tiempos de ciclo, se llevó a cabo una reingeniería completa del lazo dinámico, implementada en una arquitectura modular desacoplada (\texttt{robot\_ui\_node\_2} y máquina de estados \texttt{PickAndPlaceSMV2}). Esta versión V2 sustituyó el esquema de dos etapas por un algoritmo continuo que estima la velocidad de cada pieza y ejecuta la trayectoria de intercepción de forma automática.
+Para superar la dependencia del operador y optimizar los tiempos de ciclo, se llevó a cabo una reingeniería completa del lazo dinámico, implementada en una arquitectura modular desacoplada (\texttt{robot\_ui\_node} y máquina de estados \texttt{PickAndPlaceSMV2}). Esta versión V2 sustituyó el esquema de dos etapas por un algoritmo continuo que estima la velocidad de cada pieza y ejecuta la trayectoria de intercepción de forma automática.
 
 \subsection{Estimación de Velocidad por Compuertas Espaciales en Visión}
 En los ensayos preliminares de la versión V1, calcular la velocidad en el hilo de la interfaz mediante la diferencia temporal de mensajes ROS 2 introducía desvíos notables (del orden del $20\text{--}25\%$) debido a la latencia acumulada en los buffers de captura de video y al retardo de refresco gráfico.
 
 Para mitigar las fluctuaciones temporales (\textit{jitter}) y desacoplar la estimación de la carga de la interfaz, el cálculo de velocidad se trasladó al lazo de procesamiento en OpenCV dentro de \texttt{VisionDetectorNode}. Se establecieron dos compuertas espaciales virtuales fijas sobre la cinta:
 \begin{itemize}
-    \item \textbf{Compuerta de Entrada ($Y_1 = -160.0\text{ mm}$):} Registra la marca temporal de cruce $t_1$ mediante \texttt{time.perf\_counter()}.
-    \item \textbf{Compuerta de Medición y Disparo ($Y_2 = -90.0\text{ mm}$):} Registra la marca temporal $t_2$ al completar el recorrido fijo $\Delta Y = 70.0\text{ mm}$.
+    \item \textbf{Compuerta de Entrada ($Y_1 = -140.0\text{ mm}$):} Registra la marca temporal de cruce $t_1$ mediante \texttt{time.perf\_counter()} junto a la coordenada observada $y_1$.
+    \item \textbf{Compuerta de Medición y Disparo ($Y_2 = -70.0\text{ mm}$):} Registra la marca temporal $t_2$ y la posición $y_2$ al completar el recorrido nominal fijo $\Delta Y = 70.0\text{ mm}$.
 \end{itemize}
 
-La velocidad lineal estimada del objeto se obtiene directamente a partir del diferencial observado:
+La velocidad lineal estimada del objeto se obtiene directamente a partir del diferencial observado en los fotogramas de cruce:
 \begin{equation}
-    v_{\text{obj}} = \frac{Y_2 - Y_1}{t_2 - t_1}
+    v_{\text{obj}} = \frac{y_2 - y_1}{t_2 - t_1}
 \end{equation}
 
 Una vez validada la magnitud dentro de los límites operativos admisibles ($v_{\text{obj}} \in [40.0, 250.0]\text{ mm/s}$), el nodo publica la pose y velocidad a través de \texttt{/detected\_object\_dynamic\_pose}, activando de inmediato la máquina de estados.
@@ -1546,7 +1525,7 @@ Un aspecto crítico en el control coordinado reside en la coexistencia de dos co
     \begin{equation}
         T_{\text{MIN\_ROBOT}} = \max\left(0.60\text{ s}, \, \max_{i \in \{1,2,3\}} \frac{1.875 \cdot |\Delta q_i| \cdot \text{DEG\_TO\_STEPS} \cdot i_{red}[i]}{850\text{ Hz}}\right)
     \end{equation}
-    Para el trayecto completo nominal desde la guardia ($X=215, Y=-75, Z=100\text{ mm}$) hasta la intercepción ($X=215, Y=120, Z=78\text{ mm}$), este cálculo arroja $T_{\text{MIN\_ROBOT}} \approx 0.85\text{ s}$. Si la velocidad observada impone un tiempo disponible menor ($t_{disp} < T_{\text{MIN\_ROBOT}}$), la máquina de estados aborta preventivamente la intercepción. Esto evita que el manipulador inicie trayectorias inviables donde los motores perderían sincronismo al intentar acelerar por encima de $850\text{ Hz}$.
+    Para el trayecto completo nominal desde la guardia ($X=215, Y=-75, Z=100\text{ mm}$) hasta la intercepción ($X=215, Y=120, Z=76\text{ mm}$), este cálculo arroja $T_{\text{MIN\_ROBOT}} \approx 0.85\text{ s}$. Si la velocidad observada impone un tiempo disponible menor ($t_{disp} < T_{\text{MIN\_ROBOT}}$), la máquina de estados aborta preventivamente la intercepción. Esto evita que el manipulador inicie trayectorias inviables donde los motores perderían sincronismo al intentar acelerar por encima de $850\text{ Hz}$.
     
     \item \textbf{Cota Inferior del Generador Quíntico en Firmware ($t_{\text{min\_fw}} = 0.60\text{ s}$):} 
     En \texttt{trajectory\_planner.c}, el microcontrolador evalúa su propia cota de seguridad local. Si recibe una consigna cartesiana corta (por ejemplo, correcciones de elevación o reacomodamientos), el generador garantiza que la duración nunca sea inferior a $0.60\text{ s}$, impidiendo divisiones por cero o sobreaceleraciones locales en la FPU.
@@ -1612,7 +1591,7 @@ En la Tabla~\ref{tab:cumplimiento_objetivos} se presenta la contrastación forma
 2. Definición de Módulos y Reingeniería & Cumplido & Rediseño de engranajes con chavetero, aislamiento SCL/SDA, migración de cinemática/trayectorias a STM32 y desarrollo de GUI en PyQt5. \\ \hline
 3. Procesamiento Digital de Imágenes & Cumplido & Detección cenital a 30 FPS en espacio HSV, clasificación Cubo/Cono por Rect Ratio (87.2\% de efectividad global) y estimación de velocidad por compuertas espaciales. \\ \hline
 4. Planificador Dinámico & Cumplido & Algoritmo de intercepción MRU en ROS 2 sincronizado con trayectoria quíntica local en STM32 ($T_{\text{traj}} = \max(T_{\text{MIN\_ROBOT}}, t_{\text{arribo}} - 0.15\text{ s})$). \\ \hline
-5. Validación Experimental Cuantitativa & Cumplido & Tasa de éxito del 80.0\% (32/40) en ensayos dinámicos operativos válidos (74.4\% en el cómputo total de la celda 32/43) y 100\% en modo estático. \\ \hline
+5. Validación Experimental Cuantitativa & Cumplido & Tasa de éxito en agarre del 77.1\% (27/35) y efectividad global de ciclo Pick+Place clasificado del 74.3\% (26/35) en intercepción dinámica continua, con 100\% en modo estático ($N=23$). \\ \hline
 6. Supervisión Remota (Opcional) & No ejecutado & Descartado formalmente para priorizar la robustez del lazo de tiempo real de intercepción dinámica. \\ \hline
 \end{tabular}
 \caption{Matriz de cumplimiento de objetivos del Proyecto Final de Estudios.}
@@ -1624,7 +1603,7 @@ Para evaluar el desempeño global de la celda de manufactura, se definieron los 
 
 \section{Caso de Uso 1: Pick-and-Place Estático con Retroalimentación Visual}
 \subsection{Descripción del Escenario}
-Se dispuso el objeto en coordenadas cartesianas conocidas dentro del espacio de trabajo sobre la cinta detenida ($X = 215.0\text{ mm}$, $Z = 78.0\text{ mm}$, $Y \in [+10, +140]\text{ mm}$). Se realizaron 23 repeticiones evaluando el agarre magnético y la correcta clasificación hacia el depósito.
+Se dispuso el objeto en coordenadas cartesianas conocidas dentro del espacio de trabajo sobre la cinta detenida ($X = 215.0\text{ mm}$, $Z = 76.0\text{ mm}$, $Y \in [+10, +140]\text{ mm}$). Se realizaron 23 repeticiones evaluando el agarre magnético y la correcta clasificación hacia el depósito.
 
 \subsection{Resultados Cuantitativos y Registro Experimental}
 En la Tabla~\ref{tab:registro_estatico_manual} se detalla el registro empírico de las corridas experimentales correspondientes a la evaluación estática con retroalimentación visual ($N = 23$), consignando la coordenada longitudinal objetivo ($Y_{\text{pick}}$), el éxito en la fase de agarre (\textit{Pick}), la fase de depósito (\textit{Place}) y la clasificación morfológica obtenida.
@@ -1718,11 +1697,10 @@ En la Tabla~\ref{tab:registro_dinamico_completo} se detalla el registro empíric
 \subsection{Resultados Cuantitativos y Análisis Estadístico}
 Del total de 35 registros de prueba:
 \begin{itemize}
-    
-    \item Sobre los \textbf{35 ciclos operativos válidos}, el robot logró completar la maniobra de (\textit{Pick} exitoso) en \textbf{27 ocasiones}, representando una \textbf{tasa de éxito del 77.14\%}. Si se evalúa la totalidad de los 35 eventos incluyendo el desempeño físico de la cinta motriz, la tasa global de la celda se sitúa en el \textbf{91.4\%} ($32/35$).
-    \item De los 27 casos donde se ejecutó un \textit{Pick} exitoso, en 1 ocasiones se registró un fallo de clasificacion (\textit{Place} $\times$), lo que representa un \textbf{3.7\%} de fallos en la clasificación morfológica.
-    \item En los 8 casos donde fallo el (\textit{Pick} $\times$), representando una \textbf{tasa de error del 22.9\%}, se observó que 4 de ellos fueron consecuencia de una captura erronea de la velocidad, lo que representa un \textbf{11.4\%} de los casos, mientras que los 4 restantes se debieron a errores de agarre por fricción insuficiente, tambien un \textbf{11.4\%} de los casos.
-    \item El rango de velocidad lineal registrado exitosamente osciló entre $66.5\text{ mm/s}$ y $88.9\text{ mm/s}$, con un promedio de $\bar{v} = 75.9\text{ mm/s}$.
+    \item Sobre los \textbf{35 ciclos operativos válidos}, el robot logró completar la maniobra de (\textit{Pick} exitoso) en \textbf{27 ocasiones}, representando una \textbf{tasa de éxito del 77.14\%}.
+    \item De los 27 casos donde se ejecutó un \textit{Pick} exitoso, en 1 ocasión se registró un fallo de clasificación (\textit{Place} $\times$), lo que representa un \textbf{3.7\%} de fallos en la clasificación morfológica.
+    \item En los 8 casos donde falló el (\textit{Pick} $\times$), representando una \textbf{tasa de error del 22.9\%}, se observó que 4 de ellos fueron consecuencia de una captura errónea de la velocidad, lo que representa un \textbf{11.4\%} de los casos, mientras que los 4 restantes se debieron a errores de agarre por fricción insuficiente, también un \textbf{11.4\%} de los casos.
+    \item El rango de velocidad lineal registrado exitosamente osciló entre $65.6\text{ mm/s}$ y $88.9\text{ mm/s}$, con un promedio de $\bar{v} = 75.9\text{ mm/s}$.
 \end{itemize}
 
 En la Tabla~\ref{tab:resultados_dinamico} se presenta el desglose consolidado de los modos de fallo observados durante las pruebas dinámicas.
@@ -1735,9 +1713,9 @@ En la Tabla~\ref{tab:resultados_dinamico} se presenta el desglose consolidado de
 \midrule
 \textit{Pick} + \textit{Place} clasificado correcto & 26 & 74.3\% \\
 \textit{Pick} exitoso & 27 & 77.1\% \\
-Fallo en clasificación morfológica & 1/27(\textit{Pick}) exitosos, & 3.7\% \\
-Fallo en agarre / sincronismo inicial (\textit{Pick} $\times$) & 4 &11.4\% \\
-Fallo en captura de velocidad (\textit{Pick} $\times$) & 4 &11.4\% \\
+Fallo en clasificación morfológica & 1/27 (\textit{Pick}) exitosos & 3.7\% \\
+Fallo en agarre / sincronismo inicial (\textit{Pick} $\times$) & 4 & 11.4\% \\
+Fallo en captura de velocidad (\textit{Pick} $\times$) & 4 & 11.4\% \\
 \midrule
 \textbf{Total de Ensayos Operativos Válidos} & \textbf{35} & \textbf{100.0\%} \\
 \bottomrule

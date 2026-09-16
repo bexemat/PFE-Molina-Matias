@@ -1,8 +1,8 @@
-"""Nodo puente de orquestación y enrutamiento de hardware entre ROS 2 y micro-ROS[cite: 45].
+"""Nodo puente de orquestación y enrutamiento de hardware entre ROS 2 y micro-ROS.
 
 Centraliza el flujo de consignas manuales (P2P), calibración de origen (homing),
 activación del solenoide magnético y propagación del estado de parada de emergencia
-hacia todos los componentes distribuidos de la celda robótica[cite: 45].
+hacia todos los componentes distribuidos de la celda robótica.
 """
 
 from typing import Optional

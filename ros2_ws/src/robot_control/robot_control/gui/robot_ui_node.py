@@ -4,16 +4,16 @@ Este módulo constituye el punto de entrada principal para el control y la super
 de la celda de manufactura y clasificación. Integra concurrentemente:
     1. Operación manual y diagnóstico P2P: Modulación directa sobre espacio articular y cartesiano.
     2. Supervisión de visión artificial: Renderizado en tiempo real del flujo de video
-       anotado procedente del nodo cenital[cite: 41].
+       anotado procedente del nodo cenital.
     3. Trazado sagital en tiempo real (Y-Z): Monitoreo gráfico de la trayectoria ejecutada
-       por el TCP mediante integración continua a ~30 Hz[cite: 41].
+       por el TCP mediante integración continua a ~30 Hz.
     4. Máquina de estados autónoma: Coordinación de secuencias estáticas y dinámicas continuas
-       sincronizadas por eventos con el firmware embebido de la STM32[cite: 40, 41].
+       sincronizadas por eventos con el firmware embebido de la STM32.
 
 Arquitectura de concurrencia:
     Se apoya en la clase ROS2Thread (hilo de trabajo desacoplado) para procesar el ciclo de
     eventos rclpy.spin(), recibiendo telemetría y publicando consignas de forma no bloqueante
-    mediante señales Qt seguras (pyqtSignal)[cite: 41, 42].
+    mediante señales Qt seguras (pyqtSignal).
 """
 
 import sys
@@ -50,12 +50,12 @@ class MainWindowV2(QMainWindow):
 
     Administra el ciclo de vida de los componentes gráficos, procesa la telemetría
     articular y cartesiana devuelta por los encoders AS5600, enruta las metas espaciales
-    hacia la máquina de estados PickAndPlaceSMV2 y comanda el enclavamiento del E-Stop[cite: 40, 41].
+    hacia la máquina de estados PickAndPlaceSMV2 y comanda el enclavamiento del E-Stop.
 
     Atributos:
-        ros_thread (ROS2Thread): Instancia del hilo de comunicación reactivo con ROS 2[cite: 41].
-        sm (PickAndPlaceSMV2): Instancia del controlador de estados determinista[cite: 40, 41].
-        plot_timer (QTimer): Temporizador periódico (~30 Hz) dedicado al renderizado del plano sagital[cite: 41].
+        ros_thread (ROS2Thread): Instancia del hilo de comunicación reactivo con ROS 2.
+        sm (PickAndPlaceSMV2): Instancia del controlador de estados determinista.
+        plot_timer (QTimer): Temporizador periódico (~30 Hz) dedicado al renderizado del plano sagital.
     """
 
     
