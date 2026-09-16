@@ -1,8 +1,8 @@
 /**:
   ros__parameters:
-    # -------------------------------------------------------------
-    # 1. LÍMITES ARTICULARES (en radianes y grados para UI)
-    # -------------------------------------------------------------
+    # --------------------------------------------------------------------------
+    # 1. LÍMITES ARTICULARES FÍSICOS (Sincronizados con kinematics.c y UI V2)
+    # --------------------------------------------------------------------------
     joints:
       q1:
         min_deg: -90.0
@@ -10,38 +10,46 @@
         min_rad: -1.5707963
         max_rad: 1.5707963
       q2:
-        min_deg: 60.0
+        min_deg: 20.0
         max_deg: 157.0
-        min_rad: 1.0471975
+        min_rad: 0.3490658
         max_rad: 2.7401669
       q3:
-        min_deg: -25.0
-        max_deg: 65.0
-        min_rad: -0.4363323
-        max_rad: 1.1344640
+        min_deg: -75.0
+        max_deg: 25.0
+        min_rad: -1.3089969
+        max_rad: 0.4363323
 
-    # -------------------------------------------------------------
-    # 2. PLANIFICACIÓN Y DINÁMICA (jtraj)
-    # -------------------------------------------------------------
-    planner:
-      dt: 0.045                 # Paso de tiempo de discretización (45 ms)[cite: 1]
-      max_joint_vel: 1.5        # Velocidad articular máxima (rad/s)[cite: 1]
-      default_duration: 5.0     # Tiempo por defecto si no se especifica
-      min_duration: 1.0         # Tiempo mínimo de seguridad
-
-    # -------------------------------------------------------------
-    # 3. PUNTOS CLAVE Y POSICIONES FIJAS (Espacio Cartesiano en m)
-    # -------------------------------------------------------------
+    # --------------------------------------------------------------------------
+    # 2. PARÁMETROS CINEMÁTICOS Y OPERATIVOS V2 (Espacio Cartesiano en mm)
+    # --------------------------------------------------------------------------
     kinematics:
-      homing_position: [0.1723, 0.0, 0.17185][cite: 5]
-      drop_off_point: [0.15275, -0.15275, 0.05][cite: 5]
-      tool_z_offset: 0.04                      # Elevación de la base de piezas (40mm)[cite: 1]
+      # Puntos clave del ciclo de Pick & Place continuo
+      x_conveyor: 215.0         # Eje de cruce sobre cinta transportadora [mm]
+      y_target_pick: 120.0      # Cota síncrona de intercepción dinámica [mm]
+      z_pick: 76.0              # Altura de sujeción electromagnética [mm]
+      z_lift: 125.0             # Elevación vertical de seguridad (lift) [mm]
+      
+      # Posición de guardia de reposo dinámico
+      guard_position: [215.0, -75.0, 100.0]
 
-    # -------------------------------------------------------------
-    # 4. RED Y COMUNICACIONES DE VISIÓN
-    # -------------------------------------------------------------
-    vision_server:
-      ip: "127.0.0.1"[cite: 5]
-      port: 65432[cite: 5]
-      timeout_sec: 5.0[cite: 5]
-      max_retries: 3[cite: 5]
+      # Cestas de depósito según clase morfológica
+      place_cube: [115.0, 115.0, 42.0]     # Clase 1: Cubo [mm]
+      place_cone: [120.0, -120.0, 42.0]    # Clase 2: Cono [mm]
+
+    # --------------------------------------------------------------------------
+    # 3. DINÁMICA DEL PLANIFICADOR EMBEBIDO (Sincronizado con Firmware STM32)
+    # --------------------------------------------------------------------------
+    planner:
+      dt: 0.010                 # Periodo determinista de mControlTask (10 ms / 100 Hz)
+      traj_min_duration_s: 0.60 # Cota temporal mínima absoluta del firmware
+      safe_freq_hz: 850.0       # 85% de MAX_V_HZ (1000 Hz) en actuadores paso a paso
+      settling_tolerance_deg: 0.45 # Tolerancia terminal de convergencia angular
+
+    # --------------------------------------------------------------------------
+    # 4. PARÁMETROS DE ESTIMACIÓN DE VISIÓN
+    # --------------------------------------------------------------------------
+    vision:
+      x_fixed_tracking: 215.0  # Cota nominal publicada por el tracking óptico [mm]
+      y_drop_failsafe: 135.0    # Umbral de detección de pérdida de pieza [mm]
+      t_anticipo_s: 0.15        # Adelanto por retardo electromagnético [s]

@@ -1,18 +1,21 @@
 /**
  * @file trajectory_planner.c
- * @brief Generador analítico de perfiles de interpolación quínticos y lazo de asentamiento PD.
- * @author Matías Exequiel Molina <ingenieria@uncuyo.edu.ar>
+ * @brief Generador analítico de perfiles polinómicos quínticos y supervisión de convergencia terminal.
+ * @author Matías Exequiel Molina <matimolina123@gmail.com>
  * @date 2026
  *
- * @details Este módulo implementa un planificador analítico polinómico de quinto grado (clase C^2).
- * Proporciona transiciones continuas con velocidad y aceleración nulas en ambos extremos:
+ * @details Este módulo implementa un generador de trayectorias analítico polinómico de quinto grado (clase C^2).
+ * Proporciona transiciones suaves con velocidad y aceleración inicial y final nulas:
  * \f[
  *   s(\tau) = 10\tau^3 - 15\tau^4 + 6\tau^5, \quad \tau = \frac{t}{T} \in [0, 1]
  * \f]
- * Esto garantiza jerk finito, eliminando discontinuidades de inercia y vibraciones en piezas impresas en 3D.
- * Incluye saturación dinámica de velocidad por eje y transición a un lazo de asentamiento terminal.
+ * La derivada máxima de este perfil normalizado corresponde a \f$s'(\tau)_{max} = 1.875\f$, factor utilizado
+ * analíticamente para calcular el tiempo mínimo de viaje (\f$T_{min}\f$) garantizando que ningún actuador
+ * exceda el 85% de su velocidad máxima admisible (850 Hz).
+ *
+ * Incorpora desacople y fallback automático a interpolación articular ante pérdida de alcanzabilidad
+ * o singularidades en el espacio cartesiano intermedio, además de supervisión de asentamiento terminal.
  */
-
 #include "trajectory_planner.h"
 #include "kinematics.h"
 #include "motors.h"
@@ -39,7 +42,8 @@ void TrajectoryPlanner_Init(void) {
  *
  * @details Realiza los siguientes pasos de control determinista:
  *  1. Valida alcanzabilidad del objetivo resolviendo la cinemática inversa final (q_target).
- *  2. Estima la posición cartesiana inicial (p_start) a partir de la telemetría actual.
+ *  2. Estima la posición cartesiana inicial (p_start) a partir de la telemetría actual y
+ *     almacena la pose articular de partida (q_start).
  *  3. Calcula el tiempo mínimo viable (t_min) analizando el desplazamiento angular por eje,
  *     la relación de reducción y el pico de aceleración quíntica (factor 1.875), limitando
  *     la frecuencia máxima al 85% de la velocidad límite del motor (850 Hz).
@@ -67,6 +71,11 @@ bool TrajectoryPlanner_StartCtraj(const float target_xyz_mm[3], float duration_s
     g_traj_planner.p_target[0] = target_xyz_mm[0];
     g_traj_planner.p_target[1] = target_xyz_mm[1];
     g_traj_planner.p_target[2] = target_xyz_mm[2];
+
+    /* Registro de la pose articular inicial para soporte de fallback articular */
+    g_traj_planner.q_start[0] = current_q_deg[0];
+    g_traj_planner.q_start[1] = current_q_deg[1];
+    g_traj_planner.q_start[2] = current_q_deg[2];
 
     /* 1. Desplazamiento angular demandado en cada articulación [°] */
     float dq[3];
@@ -116,22 +125,30 @@ bool TrajectoryPlanner_StartCtraj(const float target_xyz_mm[3], float duration_s
  *  - **Fase 1 (tau < 1.0): Interpolación Quíntica C^2:**
  *    Calcula el parámetro normalizado tau = t / T, evalúa la coordenada cartesiana instantánea,
  *    resuelve la cinemática inversa y deriva la consigna de velocidad feedforward qd_cmd.
+ *    Si la línea recta cartesiana atraviesa una singularidad o excede el workspace intermedio,
+ *    conmuta dinámicamente a interpolación quíntica articular pura entre q_start y q_target,
+ *    evitando abortar la maniobra y asegurando la llegada a la meta sin detener el ciclo de trabajo.
  *  - **Fase 2 (tau >= 1.0): Asentamiento Terminal y Control Fino:**
- *    Congela la meta angular en q_target y supervisa que el error residual en los 3 ejes sea
- *    inferior a 0.45°. Si se cumple la tolerancia o transcurren 0.8 s (timeout de fricción),
- *    da por finalizada la trayectoria de forma segura.
+ *    Congela la meta angular en q_target y anula el término feedforward. Supervisa el error
+ *    residual en los 3 ejes; si converge dentro de la tolerancia (|error| <= 0.45°), finaliza
+ *    retornando TRAJ_STATUS_SUCCESS (2). Si transcurre la ventana de guarda de seguridad
+ *    (0.80 s) sin alcanzar dicha cota, concluye retornando TRAJ_STATUS_TIMEOUT (3).
  *
  * @param[in]  dt_sec         Paso temporal del lazo de control (0.010 s) [s].
  * @param[out] q_cmd_out      Vector de consignas angulares instantáneas calculadas [°].
- * @param[out] qd_cmd_out     Vector de consignas de velocidad instantánea calculadas [°/s].
+ * @param[out] qd_cmd_out     Vector de consignas de velocidad instantánea feedforward calculadas [°/s].
  * @param[in]  current_q_deg  Vector de posiciones reales actuales leídas por encoders [°].
  *
- * @return true  Trayectoria en ejecución activa.
- * @return false Trayectoria concluida (asentamiento completado o finalizado por timeout).
+ * @return TrajectoryStatus_t Código de estado de ejecución y sincronismo con ROS 2:
+ *         - TRAJ_STATUS_IDLE (0): Planificador inactivo o parámetro temporal inválido.
+ *         - TRAJ_STATUS_RUNNING (1): Interpolación continua en progreso o asentamiento activo.
+ *         - TRAJ_STATUS_SUCCESS (2): Trayectoria concluida exitosamente con error <= 0.45°.
+ *         - TRAJ_STATUS_TIMEOUT (3): Trayectoria concluida por expiración del guardián de 0.80 s.
+ *         - TRAJ_STATUS_ERROR_IK_PATH (-2): Aborto dinámico reservado ante falla crítica irrecuperable.
  */
-bool TrajectoryPlanner_Update(float dt_sec, float q_cmd_out[3], float qd_cmd_out[3], const float current_q_deg[3]) {
+TrajectoryStatus_t TrajectoryPlanner_Update(float dt_sec, float q_cmd_out[3], float qd_cmd_out[3], const float current_q_deg[3]) {
     if (!g_traj_planner.is_active || (dt_sec <= 0.0001f)) {
-        return false;
+        return TRAJ_STATUS_IDLE;
     }
 
     g_traj_planner.elapsed_time += dt_sec;
@@ -139,7 +156,7 @@ bool TrajectoryPlanner_Update(float dt_sec, float q_cmd_out[3], float qd_cmd_out
 
     if (tau < 1.0f) {
         /* =====================================================================
-         * FASE 1: Trayectoria Cartesiana Quíntica C^2 Continua
+         * FASE 1: Trayectoria Quíntica C^2 Continua
          * ===================================================================== */
         const float tau2 = tau * tau;
         const float tau3 = tau2 * tau;
@@ -156,8 +173,15 @@ bool TrajectoryPlanner_Update(float dt_sec, float q_cmd_out[3], float qd_cmd_out
         /* Transformación inversa analítica a coordenadas generalizadas */
         float q_current[3];
         if (!Kinematics_IK(p_current, q_current)) {
-            TrajectoryPlanner_Abort();
-            return false;
+            /* -----------------------------------------------------------------
+             * FALLBACK ARTICULAR: Recuperación determinista ante singularidad.
+             * Si la recta cartesiana viola límites o singularidad cilíndrica,
+             * interpolamos directamente en el espacio articular sobre el mismo
+             * factor quíntico s(tau), garantizando arribo a destino sin saltos.
+             * ----------------------------------------------------------------- */
+            for (int i = 0; i < 3; i++) {
+                q_current[i] = g_traj_planner.q_start[i] + s * (g_traj_planner.q_target[i] - g_traj_planner.q_start[i]);
+            }
         }
 
         /* Cálculo de velocidades feedforward por derivada discreta en el paso dt */
@@ -167,11 +191,11 @@ bool TrajectoryPlanner_Update(float dt_sec, float q_cmd_out[3], float qd_cmd_out
             g_traj_planner.q_last[i] = q_current[i];
         }
 
-        return true;
+        return TRAJ_STATUS_RUNNING; /* Código 1: En interpolación activa */
 
     } else {
         /* =====================================================================
-         * FASE 2: Asentamiento Terminal Estático con Lazo Cerrado PD
+         * FASE 2: Asentamiento Terminal Estático
          * ===================================================================== */
         for (int i = 0; i < 3; i++) {
             q_cmd_out[i] = g_traj_planner.q_target[i];
@@ -189,13 +213,19 @@ bool TrajectoryPlanner_Update(float dt_sec, float q_cmd_out[3], float qd_cmd_out
             }
         }
 
-        /* Fin de trayectoria por convergencia angular o expiración de ventana de seguridad */
-        if (all_reached || (g_traj_planner.settling_time >= TRAJ_SETTLING_TIMEOUT_S)) {
+        /* Criterio A: Convergencia angular exitosa dentro de tolerancia */
+        if (all_reached) {
             g_traj_planner.is_active = false;
-            return false;
+            return TRAJ_STATUS_SUCCESS; /* Código 2: Éxito de precisión */
         }
 
-        return true;
+        /* Criterio B: Fin por expiración de guarda de seguridad (watchdog) */
+        if (g_traj_planner.settling_time >= TRAJ_SETTLING_TIMEOUT_S) {
+            g_traj_planner.is_active = false;
+            return TRAJ_STATUS_TIMEOUT; /* Código 3: Timeout sin alcanzar 0.45° */
+        }
+
+        return TRAJ_STATUS_RUNNING; /* Código 1: Todavía intentando asentar */
     }
 }
 

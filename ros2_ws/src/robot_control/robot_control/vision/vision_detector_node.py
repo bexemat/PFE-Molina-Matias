@@ -1,10 +1,21 @@
-#!/usr/bin/env python3
-"""Nodo de visión artificial cenital para detección, velocidad y clasificación geométrica.
+"""Nodo de percepción visual cenital para seguimiento continuo y clasificación geométrica.
 
-Procesa el flujo de video a 30 FPS en espacio de color HSV, ejecuta una
-transformación métrica cuadrática (píxel a milímetro), estima la velocidad lineal
-mediante compuertas espaciales fijas y clasifica la morfología de las piezas
-(Cubo vs Cono) de forma invariante a la rotación combinando Extent y Rect Ratio.
+Este nodo procesa el flujo de captura a 30 FPS sobre la cinta transportadora en espacio HSV[cite: 48].
+Resuelve tres tareas concurrentes:
+    1. Transformación métrica cuadrática: Compensación de distorsión de perspectiva y lente
+       mediante un modelo polinómico de segundo orden Y_robot = f(cx_px)[cite: 48].
+    2. Estimación de velocidad lineal: Registro de tiempos de cruce entre compuertas
+       espaciales fijas (Y_GATE_1 y Y_GATE_2) utilizando marcas de tiempo de alta precisión[cite: 48].
+    3. Clasificación morfológica invariante: Discriminación geométrica entre prismas rectangulares
+       (Cubo) y conos truncados (Cono) combinando densidad superficial (Extent) y relación
+       de áreas ortogonales vs. rotadas (Rect Ratio)[cite: 48].
+
+Interfaces ROS 2:
+    Publicadores:
+        - /detected_object_pose (geometry_msgs/Point): Pose cartesiana estática [X_FIXED, Y, Z_FIXED][cite: 48].
+        - /detected_object_dynamic_pose (geometry_msgs/Point): Vector dinámico [Velocidad, Y_actual, Flag_medido][cite: 48].
+        - /vision/object_class (std_msgs/Int8): Identificador de clase (1: Cubo, 2: Cono)[cite: 48].
+        - /vision/image_annotated (sensor_msgs/Image): Flujo anotado para renderizado en GUI[cite: 48].
 """
 
 from typing import Optional
@@ -27,18 +38,23 @@ class VisionDetectorNode(Node):
     """Nodo ROS 2 para la percepción y análisis cinemático de objetos en cinta."""
 
     # Compuertas espaciales para cálculo de velocidad lineal determinista [mm]
-    Y_GATE_1: float = -160.0  # Cota inicial de temporización [mm]
-    Y_GATE_2: float = -90.0   # Cota de disparo y cálculo [mm] (Delta Y = 70.0 mm)
+    Y_GATE_1: float = -140.0  # Cota inicial de temporización [mm]
+    Y_GATE_2: float = -70.0   # Cota de disparo y cálculo [mm] (Delta Y = 70.0 mm)
 
     # Restricciones espaciales del área de trabajo sobre la cinta [mm]
-    X_FIXED_MM: float = 210.0
-    Z_FIXED_MM: float = 77.0
+    # Unificadas estrictamente con la máquina de estados FSM y el informe
+    X_FIXED_MM: float = 215.0  # Eje longitudinal central de la cinta transportadora
+    Z_FIXED_MM: float = 76.0   # Altura nominal de contacto de la pieza
 
     # Coeficientes del polinomio cuadrático calibrado: Y_robot = a*x^2 + b*x + c
-    POLY_A: float = 0.0000775319
-    POLY_B: float = 0.5864531721
-    POLY_C: float = -185.7812192642
+    POLY_A: float = 0.0000278487
+    POLY_B: float =  0.5997512673
+    POLY_C: float = -193.5175741780
 
+
+
+
+      
     def __init__(self) -> None:
         """Inicializa periféricos de captura, publicadores y estructuras morfológicas."""
         super().__init__("vision_detector_node")
@@ -85,7 +101,7 @@ class VisionDetectorNode(Node):
         self.cap.set(cv2.CAP_PROP_FPS, 30)
 
         # Rangos cromáticos HSV calibrados para objeto de prueba (Rosa)
-        self.lower_hsv: np.ndarray = np.array([131, 120, 160], dtype=np.uint8)
+        self.lower_hsv: np.ndarray = np.array([140, 144, 110], dtype=np.uint8)
         self.upper_hsv: np.ndarray = np.array([179, 255, 255], dtype=np.uint8)
 
         # Elementos estructurantes para operaciones morfológicas
@@ -208,16 +224,16 @@ class VisionDetectorNode(Node):
                         box = np.intp(cv2.boxPoints(rect_rot))
                         cv2.drawContours(frame, [box], 0, (255, 0, 0), 2)
                     cv2.circle(frame, (int(cx), int(cy)), 5, (0, 0, 255), -1)
-                    txt = f"{forma_txt} | Y:{y_robot:.1f} mm"
-                    cv2.putText(
-                        frame,
-                        txt,
-                        (int(cx) + 10, int(cy) - 15),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 0),
-                        2,
-                    )
+                    # txt = f"{forma_txt} | Y:{y_robot:.1f} mm"
+                    # cv2.putText(
+                    #     frame,
+                    #     txt,
+                    #     (int(cx) + 10, int(cy) - 15),
+                    #     cv2.FONT_HERSHEY_SIMPLEX,
+                    #     0.5,
+                    #     (0, 255, 0),
+                    #     2,
+                    # )
 
         try:
             img_msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")

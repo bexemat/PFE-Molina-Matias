@@ -1,8 +1,14 @@
-"""Modelado cinemático analítico para el manipulador paralelo de 3 GDL.
+"""Cinemática analítica para manipulador serial de 3 GDL con paralelogramo de 4 barras.
 
-Implementa la cinemática directa (FK) e inversa (IK) geométrica en el
-plano sagital proyectado r-z', eliminando la necesidad de eslabones y
-articulaciones virtuales de la convención Denavit-Hartenberg.
+Resuelve las transformaciones directas e inversas de manera trigonométrica cerrada
+en el semiplano sagital r-z'. El mecanismo de cuatro barras mantiene pasivamente
+la horizontalidad del efector final, suprimiendo la necesidad de parametrización D-H
+convencional y reduciendo el cómputo a un sistema desacoplado de 3 GDL puramente posicional.
+
+Restricciones articulares operativas:
+    - Q1 (Cintura): [-90.0°, +90.0°] - Rotación azimutal base[cite: 39].
+    - Q2 (Hombro):  [+20.0°, +157.0°] - Elevación del brazo (cota 20° requerida para Y = -140 mm)[cite: 39, 48].
+    - Q3 (Muñeca):  [-75.0°, +25.0°] - Posicionamiento de antebrazo[cite: 39].
 """
 
 from typing import List, Tuple
@@ -20,7 +26,7 @@ O_Z_M: float = 0.04087  # Desfase axial vertical del efector final [m]
 # Límites angulares de seguridad física articular [°]
 Q1_MIN_DEG: float = -90.0
 Q1_MAX_DEG: float = 90.0
-Q2_MIN_DEG: float = 40.0   # Mantiene coherencia estricta con el firmware
+Q2_MIN_DEG: float = 20.0   # Mantiene coherencia estricta con el firmware
 Q2_MAX_DEG: float = 157.0
 Q3_MIN_DEG: float = -75.0
 Q3_MAX_DEG: float = 25.0

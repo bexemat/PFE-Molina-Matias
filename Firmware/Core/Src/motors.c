@@ -1,13 +1,15 @@
 /**
  * @file motors.c
- * @brief Accionamiento de bajo nivel de motores paso a paso y lazo de control PD.
- * @author Matías Exequiel Molina <ingenieria@uncuyo.edu.ar>
+ * @brief Accionamiento de bajo nivel de actuadores paso a paso y lazos de control de movimiento.
+ * @author Matías Exequiel Molina <matimolina123@gmail.com>
  * @date 2026
  *
- * @details Este módulo gestiona los controladores DRV8825 mediante modulación PWM por hardware
- * en temporizadores STM32 (TIM2, TIM3, TIM13) y control digital de dirección por GPIO.
- * Implementa lazos de control de velocidad y posición para movimientos punto a punto (P2P)
- * sincronizados y seguimiento de trayectorias con compensación estática de gravedad.
+ * @details Este módulo gestiona los controladores DRV8825 mediante modulación PWM generada por
+ * periféricos temporizadores STM32 (TIM2, TIM3, TIM13) y control digital de dirección por GPIO.
+ * Implementa dos leyes de control diferenciadas según el modo operativo:
+ *  - **Modo P2P:** Control proporcional y derivativo sobre velocidad real filtrada para posicionamiento articular.
+ *  - **Modo TRAJ:** Control con prealimentación de velocidad (Feedforward) y realimentación proporcional (P)
+ *    sobre el error de posición articular para seguimiento continuo de perfiles quínticos.
  */
 
 #include "motors.h"
@@ -157,20 +159,31 @@ float computeGravityCompensation(Motor *m) {
 }
 
 /**
- * @brief Lazo de control PD con término feedforward de velocidad para seguimiento de trayectorias.
+ * @brief Lazo de control articular para seguimiento continuo de trayectorias y maniobras P2P.
  *
- * @details Calcula la velocidad angular requerida:
- * \f[
- *   v_{cmd} = \dot{q}_{ref} + K_{p\_traj} (q_{ref} - q_{real})
- * \f]
- * Transforma el comando a pulsos por segundo [Hz] considerando la reducción mecánica y el micropaseado,
- * actualiza el pin de dirección (DIR) y modula el temporizador PWM.
+ * @details Conmuta la ley de control según el estado asignado al actuador:
+ *  - **Seguimiento Continuo (m->state == TRAJ):**
+ *    Aplica control por prealimentación de velocidad más acción proporcional sobre el error de posición:
+ *    \f[
+ *      v_{cmd} = \dot{q}_{ref} + K_{p\_traj} (q_{ref} - q_{real})
+ *    \f]
+ *    El término \f$\dot{q}_{ref}\f$ provee el seguimiento nominal dinámico de la trayectoria quíntica,
+ *    mientras que el término proporcional corrige las perturbaciones mecánicas y rozamientos.
+ *  - **Posicionamiento Discreto (m->state == P2P):**
+ *    Aplica control PD con término derivativo calculado a partir de la velocidad real filtrada:
+ *    \f[
+ *      v_{cmd} = K_p (q_{ref} - q_{real}) - K_d \dot{q}_{filtrada}
+ *    \f]
  *
- * @param[in,out] m       Puntero al descriptor del motor.
- * @param[in]     q_ref   Ángulo articular de referencia [°].
+ * La velocidad calculada \f$v_{cmd}\f$ [°/s] se transforma a pulsos por segundo [Hz] en función
+ * de la reducción del tren de engranajes y la relación de micropasos (1/8), modulando el registro ARR del timer.
+ *
+ * @param[in,out] m       Puntero al descriptor del actuador (Motor).
+ * @param[in]     q_ref   Ángulo articular de referencia objetivo [°].
  * @param[in]     qd_ref  Velocidad articular feedforward de referencia [°/s].
- * @param[in]     dt      Periodo de muestreo del lazo (0.010 s) [s].
+ * @param[in]     dt      Periodo determinista de muestreo del lazo (0.010 s) [s].
  */
+
 void trajectoryPDControl(Motor *m, float q_ref, float qd_ref, float dt) {
     if (dt <= 0.0001f) {
         return;

@@ -1,18 +1,19 @@
 /**
  * @file kinematics.c
  * @brief Implementación analítica del modelado cinemático directo e inverso.
- * @author Matías Exequiel Molina <ingenieria@uncuyo.edu.ar>
+ * @author Matías Exequiel Molina <matimolina123@gmail.com>
  * @date 2026
  *
- * @details Este módulo resuelve el mapeo cinemático para el manipulador paralelo de 3 GDL
- * (arquitectura EEZYbotARM MK2 modificada). Utiliza una formulación trigonométrica cerrada
- * en el plano proyectado r-z' generada a partir de los parámetros constructivos validados en CAD.
+ * @details Este módulo resuelve el mapeo cinemático cerrado para un manipulador serial
+ * de 3 GDL con mecanismo de paralelogramo de cuatro barras para la transmisión del
+ * eslabón superior. Implementa una formulación trigonométrica cerrada en el semiplano
+ * sagital r-z' generada a partir de los parámetros constructivos validados en CAD.
  *
- * @note Principios matemáticos implementados:
- *  - Eje 1 (Cintura): Rotación azimutal cartesiana en el plano X-Y.
- *  - Ejes 2 y 3 (Hombro y Muñeca): Desacople en el plano sagital r-z' mediante la Ley del Coseno.
- *  - Eliminación de articulaciones virtuales D-H: El paralelismo inducido por el mecanismo de
- *    cuatro barras se resuelve de forma directa manteniendo la orientación horizontal del efector.
+ * @note Principios cinemáticos y desacople geométrico:
+ *  - Eje 1 (Cintura - Q1): Rotación azimutal planar en el plano cartesiano X-Y.
+ *  - Ejes 2 y 3 (Hombro - Q2 y Antebrazo - Q3): Desacople sagital en r-z' mediante la Ley del Coseno.
+ *  - Mecanismo de cuatro barras: Mantiene la orientación horizontal pasiva del efector final
+ *    (solenoide), desacoplando la orientación del extremo y reduciendo la complejidad a 3 GDL posicionales.
  */
 
 #include "kinematics.h"

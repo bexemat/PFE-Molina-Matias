@@ -1,15 +1,16 @@
 /**
  * @file microros_callbacks.c
  * @brief Callbacks de procesamiento asíncrono para la capa de comunicación micro-ROS.
- * @author Matías Exequiel Molina <ingenieria@uncuyo.edu.ar>
+ * @author Matías Exequiel Molina <matimolina123@gmail.com>
  * @date 2026
  *
  * @details Este módulo gestiona los callbacks invocados por el executor de micro-ROS:
  *  - Encolado seguro de consignas cartesianas (/microROS/cmd).
  *  - Comandos directos punto a punto en espacio articular (/microROS/p2p_cmd).
  *  - Coordinación de la calibración al origen (/microROS/homing).
- *  - Accionamiento del electroimán y parada de emergencia por hardware (/microROS/emergency_stop).
- *  - Publicación periódica determinista de la pose angular a 40 Hz (/microROS/angles).
+ *  - Accionamiento del electroimán del efector final (/microROS/electroiman).
+ *  - Parada de emergencia por software y deshabilitación de modulación PWM (/microROS/emergency_stop).
+ *  - Publicación periódica determinista de la telemetría articular a 40 Hz (/microROS/angles).
  */
 
 #include "microros_callbacks.h"
@@ -18,6 +19,8 @@
 #include "trajectory_planner.h"
 #include "cmsis_os.h"
 #include <stdio.h>
+#include <std_msgs/msg/int8.h>
+
 
 extern osMessageQueueId_t mid_PositionQueue;
 extern rcl_publisher_t publisher;
@@ -86,6 +89,38 @@ void electromagnet_callback(const void * msgin) {
  *
  * @param[in] msgin Puntero opaco al mensaje recibido (std_msgs__msg__Bool).
  */
+/**
+ * @brief Publicador de micro-ROS para la propagación de estados de la trayectoria (/planner/traj_status).
+ */
+extern rcl_publisher_t status_publisher;
+
+/**
+ * @brief Estructura de mensaje std_msgs/Int8 utilizada para notificar el estado del planificador a ROS 2.
+ */
+extern std_msgs__msg__Int8 status_msg;
+
+/**
+ * @brief Callback prioritario para la parada de emergencia por software (/microROS/emergency_stop).
+ *
+ * @details Implementa un mecanismo de enclavamiento de seguridad lógico a nivel de firmware:
+ *  - **Activación (estop_engaged = true):**
+ *      1. Cancela inmediatamente la interpolación quíntica activa (TrajectoryPlanner_Abort()).
+ *      2. Conmuta el estado de los tres actuadores a MOTOR_ERROR.
+ *      3. Apaga la modulación PWM por hardware y detiene las interrupciones periódicas en TIM13, TIM2 y TIM3.
+ *      4. Publica de forma síncrona el código de aborto TRAJ_STATUS_ABORT_ESTOP (-3) en /planner/traj_status.
+ *  - **Desactivación / Rearme (estop_engaged = false):**
+ *      - Restablece el estado de los motores a IDLE, permitiendo reanudar la recepción de comandos.
+ *
+ * @warning **Alcance del sistema de parada:** Esta función opera exclusivamente como una parada de
+ *          categoría 0 por software (supresión de pulsos lógicos). No debe considerarse una parada
+ *          de emergencia de seguridad funcional certificada bajo normativas industriales (como ISO 13849
+ *          o IEC 62061), al depender de la integridad del bus serie UART, la pila micro-ROS y el firmware,
+ *          careciendo de desconexión eléctrica directa de la línea de potencia de los motores.
+ *
+ * @param[in] msgin Puntero opaco al mensaje recibido de tipo std_msgs__msg__Bool.
+**/
+
+
 void estop_callback(const void * msgin) {
     const std_msgs__msg__Bool * msg = (const std_msgs__msg__Bool *)msgin;
     const bool estop_engaged = msg->data;
@@ -97,13 +132,17 @@ void estop_callback(const void * msgin) {
             HAL_TIM_PWM_Stop(motors[i]->timer, motors[i]->timerChannel);
             HAL_TIM_Base_Stop_IT(motors[i]->timer);
         }
+
+        /* Notificar a ROS 2 que se abortó por Parada de Emergencia Software */
+        status_msg.data = (int8_t)TRAJ_STATUS_ABORT_ESTOP; /* Código -3 */
+        rcl_publish(&status_publisher, &status_msg, NULL);
+
     } else {
         for (int i = 0; i < 3; i++) {
             motors[i]->state = IDLE;
         }
     }
 }
-
 /**
  * @brief Callback para atender solicitudes discretas de la pose articular actual.
  */

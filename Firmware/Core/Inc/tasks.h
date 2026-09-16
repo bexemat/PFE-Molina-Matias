@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <uxr/client/transport.h>
+#include "trajectory_planner.h"
 
 #ifdef __cplusplus
 extern "C" {

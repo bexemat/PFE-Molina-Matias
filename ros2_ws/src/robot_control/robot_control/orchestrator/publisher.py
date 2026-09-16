@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-"""Nodo puente de interfaz y orquestación de hardware entre ROS 2 y micro-ROS.
+"""Nodo puente de orquestación y enrutamiento de hardware entre ROS 2 y micro-ROS[cite: 45].
 
-Centraliza el enrutamiento de consignas de movimiento (P2P), calibración
-de origen (homing), control del efector final magnético y difusión
-prioritaria de paradas de emergencia (E-Stop).
+Centraliza el flujo de consignas manuales (P2P), calibración de origen (homing),
+activación del solenoide magnético y propagación del estado de parada de emergencia
+hacia todos los componentes distribuidos de la celda robótica[cite: 45].
 """
 
 from typing import Optional

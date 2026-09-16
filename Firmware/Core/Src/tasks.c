@@ -7,9 +7,10 @@
  * @details Este módulo define los dos hilos principales del sistema operativo:
  *  - **defaultTask (Prioridad Normal):** Inicializa y ejecuta el micro-ROS Client Executor,
  *    administra los publicadores y suscriptores DDS-XRCE y atiende la comunicación serial UART2 por DMA.
- *  - **mControlTask (Alta Prioridad - 100 Hz):** Núcleo de control de movimiento determinista.
+ *  -*  - **mControlTask (Alta Prioridad - 100 Hz):** Núcleo de control de movimiento determinista.
  *    Desencola metas cartesianas de mid_PositionQueue, actualiza las rampas de interpolación
- *    quíntica C^2 y ejecuta el lazo de control PD hacia los temporizadores PWM.
+ *    quíntica C^2 y ejecuta el lazo de seguimiento Feedforward de velocidad + Realimentación P de posición
+ *    hacia los temporizadores PWM.
  */
 
 #include "tasks.h"
@@ -145,8 +146,27 @@ void StartDefaultTask(void *argument) {
 /**
  * @brief Tarea determinista de alta prioridad para cinemática, planificación y control de actuadores (100 Hz).
  *
- * @param[in] argument Argumento no utilizado requerido por la firma CMSIS-RTOS V2.
+ * @details Ejecutada de manera periódica y estricta cada 10 ms (dt = 0.010 s) mediante vTaskDelayUntil().
+ * Administra el ciclo de vida del movimiento cinemático del robot a través de tres etapas secuenciales:
+ *  1. **Actualización P2P:** Modula las rampas trapezoidales de aceleración/desaceleración para aquellos
+ *     motores configurados en modo punto a punto (updateP2PRamp).
+ *  2. **Desencolado y admisión de metas cartesianas:** Extrae consignas de forma no bloqueante desde
+ *     mid_PositionQueue. Si el destino es alcanzable cinemáticamente, inicializa el planificador quíntico
+ *     C^2 (TrajectoryPlanner_StartCtraj), pasa los actuadores a modo TRAJ y notifica el estado
+ *     TRAJ_STATUS_RUNNING (1) en /planner/traj_status. En caso de singularidad o punto inalcanzable,
+ *     publica TRAJ_STATUS_ERROR_IK_START (-1).
+ *  3. **Lazo de seguimiento y propagación de estados:** Si el planificador está activo, interpola las
+ *     consignas instantáneas y evalúa el retorno de TrajectoryPlanner_Update():
+ *      - Si el estado es TRAJ_STATUS_RUNNING (1), modula la ley de control Feedforward + P hacia los
+ *        temporizadores PWM (TIM13, TIM2, TIM3).
+ *      - Si la trayectoria finaliza (TRAJ_STATUS_SUCCESS = 2, TRAJ_STATUS_TIMEOUT = 3 o
+ *        TRAJ_STATUS_ERROR_IK_PATH = -2), detiene de forma segura los trenes de pulsos PWM, conmuta
+ *        los motores a reposo (IDLE) y propaga de inmediato el código de resultado a ROS 2
+ *        en el tópico /planner/traj_status.
+ *
+ * @param[in] argument Argumento opaco no utilizado requerido por la firma estándar de CMSIS-RTOS V2.
  */
+
 void StartMotorControlTask(void *argument) {
     (void)argument;
     osStatus_t xStatus;
@@ -177,31 +197,36 @@ void StartMotorControlTask(void *argument) {
                 for (int i = 0; i < 3; i++) {
                     motors[i]->state = TRAJ;
                 }
-                status_msg.data = 1; /* Estado 1: En ejecución de trayectoria */
+                status_msg.data = (int8_t)TRAJ_STATUS_RUNNING; /* Estado 1: En ejecución */
                 rcl_publish(&status_publisher, &status_msg, NULL);
             } else {
-                status_msg.data = -1; /* Estado -1: Error cinemático / Punto inalcanzable */
+                status_msg.data = (int8_t)TRAJ_STATUS_ERROR_IK_START; /* Estado -1: Rechazo inicial */
                 rcl_publish(&status_publisher, &status_msg, NULL);
             }
         }
 
-        /* 3. Lazo determinista de seguimiento quíntico y control PD a 100 Hz */
+        /* 3. Lazo determinista de seguimiento quíntico y control a 100 Hz */
         if (g_traj_planner.is_active) {
             const float current_q[3] = {motor1.currentAngle, motor2.currentAngle, motor3.currentAngle};
-            const bool in_progress = TrajectoryPlanner_Update(CONTROL_LOOP_DT_SEC, q_cmd, qd_cmd, current_q);
 
-            for (int i = 0; i < 3; i++) {
-                motors[i]->targetAngle = q_cmd[i];
-                trajectoryPDControl(motors[i], q_cmd[i], qd_cmd[i], CONTROL_LOOP_DT_SEC);
-            }
+            // Recibimos el estado exacto del planificador
+            TrajectoryStatus_t status = TrajectoryPlanner_Update(CONTROL_LOOP_DT_SEC, q_cmd, qd_cmd, current_q);
 
-            if (!in_progress) {
+            if (status == TRAJ_STATUS_RUNNING) {
+                // Sigue en marcha: aplicamos lazo Feedforward + P
+                for (int i = 0; i < 3; i++) {
+                    motors[i]->targetAngle = q_cmd[i];
+                    trajectoryPDControl(motors[i], q_cmd[i], qd_cmd[i], CONTROL_LOOP_DT_SEC);
+                }
+            } else {
+                // Finalizó la trayectoria (SUCCESS = 2, TIMEOUT = 3, ERROR_IK = -2)
                 for (int i = 0; i < 3; i++) {
                     motors[i]->state = IDLE;
                     motors[i]->speed = 0.0f;
                     HAL_TIM_PWM_Stop(motors[i]->timer, motors[i]->timerChannel);
                 }
-                status_msg.data = 2; /* Estado 2: Trayectoria completada y asentamiento finalizado */
+                // Publicamos el código exacto a ROS 2
+                status_msg.data = (int8_t)status;
                 rcl_publish(&status_publisher, &status_msg, NULL);
             }
         }
@@ -210,7 +235,6 @@ void StartMotorControlTask(void *argument) {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }
 }
-
 /**
  * @brief Inicializa e instancía los hilos de ejecución de la aplicación en el scheduler.
  */

@@ -31,7 +31,7 @@ def main() -> None:
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cap.set(cv2.CAP_PROP_FPS, 30)
 
-    lower_hsv = np.array([131, 120, 160], dtype=np.uint8)
+    lower_hsv = np.array([125, 150, 150], dtype=np.uint8)
     upper_hsv = np.array([179, 255, 255], dtype=np.uint8)
 
     kernel_close = np.ones((11, 11), np.uint8)

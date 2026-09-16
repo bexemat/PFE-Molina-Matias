@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 CAMERA_PATH: str = "/dev/v4l/by-id/usb-Generic_HD_camera-video-index0"
-LOWER_HSV: np.ndarray = np.array([161, 91, 128], dtype=np.uint8)
+LOWER_HSV: np.ndarray = np.array([140, 144, 110], dtype=np.uint8)
 UPPER_HSV: np.ndarray = np.array([179, 255, 255], dtype=np.uint8)
 
 
@@ -21,10 +21,14 @@ def main() -> None:
         return
 
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    kernel = np.ones((5, 5), np.uint8)
+    
+    # Criterio morfológico homólogo al nodo principal
+    kernel_close = np.ones((11, 11), np.uint8)
+    kernel_open = np.ones((5, 5), np.uint8)
+
     mask = cv2.inRange(hsv, LOWER_HSV, UPPER_HSV)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close, iterations=2)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
 
     contours, _ = cv2.findContours(
         mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE

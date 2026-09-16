@@ -1,11 +1,11 @@
 /**
  * @file microros_callbacks.h
- * @brief Callbacks para tópicos y temporizadores en el entorno micro-ROS.
- * @author Matías Exequiel Molina <ingenieria@uncuyo.edu.ar>
+ * @brief Declaración de callbacks asíncronos para la capa de middleware micro-ROS.
+ * @author Matías Exequiel Molina <matimolina123@gmail.com>
  * @date 2026
  *
- * @details Despacha los mensajes entrantes hacia las estructuras del firmware y encola
- * comandos para su procesamiento determinista en el lazo de control a 100 Hz.
+ * @details Despacha los mensajes entrantes desde ROS 2 hacia los descriptores del firmware,
+ * administra el encolado no bloqueante de metas cartesianas y comanda la parada de emergencia lógica.
  */
 
 #ifndef INC_MICROROS_CALLBACKS_H_
@@ -24,37 +24,38 @@ extern "C" {
 #endif
 
 /**
- * @brief Callback para la suscripción de trayectorias cartesianas (/microROS/cmd).
+ * @brief Callback de recepción de metas cartesianas (/microROS/cmd).
  */
 void cmd_callback(const void * msgin);
 
 /**
- * @brief Callback para el comando de homing (/microROS/homing).
+ * @brief Callback para inicio de la rutina de homing articular (/microROS/homing).
  */
 void homing_callback(const void * msgin);
 
 /**
- * @brief Callback para el encendido y apagado del electroimán (/microROS/electroiman).
+ * @brief Callback para accionamiento del efector final magnético (/microROS/electroiman).
  */
 void electromagnet_callback(const void * msgin);
 
 /**
- * @brief Callback prioritario para la parada de emergencia (/microROS/emergency_stop).
+ * @brief Callback prioritario para la parada de emergencia por software (/microROS/emergency_stop).
+ * @note Opera como parada lógica por corte de trenes PWM y aborto de trayectoria en MCU.
  */
 void estop_callback(const void * msgin);
 
 /**
- * @brief Callback para la solicitud puntual de telemetría angular.
+ * @brief Callback para atender solicitudes discretas de telemetría angular (/microROS/request_current_angles).
  */
 void request_angles_callback(const void * msgin);
 
 /**
- * @brief Callback periódico (40 Hz): publica los ángulos articulares actuales en /microROS/angles.
+ * @brief Callback periódico del temporizador micro-ROS (40 Hz): publica telemetría en /microROS/angles.
  */
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time);
 
 /**
- * @brief Callback para comandos articulares punto a punto directos (/microROS/p2p_cmd).
+ * @brief Callback para comandos directos en espacio articular (/microROS/p2p_cmd).
  */
 void p2p_cmd_callback(const void * msgin);
 

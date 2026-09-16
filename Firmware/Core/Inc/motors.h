@@ -1,12 +1,14 @@
 /**
  * @file motors.h
- * @brief Controlador de actuadores paso a paso con drivers DRV8825 y lazo cerrado AS5600.
- * @author Matías Exequiel Molina <ingenieria@uncuyo.edu.ar>
+ * @brief Controlador de bajo nivel para actuadores paso a paso (DRV8825) y lazo cerrado con encoders AS5600.
+ * @author Matías Exequiel Molina <matimolina123@gmail.com>
  * @date 2026
  *
- * @details Modula los trenes de pulso por temporizadores hardware (TIM2, TIM3, TIM13),
- * gestiona señales de sentido de giro por GPIO y ejecuta perfiles trapezoidales y de
- * asentamiento PD con compensación estática de gravedad.
+ * @details Gestiona la modulación PWM por hardware (TIM2, TIM3, TIM13) y pines de sentido de giro (GPIO).
+ * Implementa dos esquemas de control:
+ *  - Perfil trapezoidal coordinado multi-eje para movimientos punto a punto (P2P).
+ *  - Lazo de seguimiento continuo con prealimentación de velocidad (Feedforward) y realimentación
+ *    proporcional (P) de posición para perfiles quínticos interpolados a 100 Hz.
  */
 
 #ifndef MOTORS_H
@@ -21,52 +23,51 @@ extern "C" {
 #define ALL_MOTORS_IDLE ((motor1.state == IDLE) && (motor2.state == IDLE) && (motor3.state == IDLE))
 
 /* =========================================================================
- * PARÁMETROS CINEMÁTICOS DE ACCIONAMIENTO (1/8 Micropaso)
+ * PARÁMETROS CINEMÁTICOS DE ACCIONAMIENTO (Modo 1/8 Micropaso)
  * ========================================================================= */
-#define SPEED_P2P_DEFAULT_HZ  (350.0f)   /**< Velocidad angular por defecto para traslados punto a punto [Hz] */
-#define MIN_SPEED_HZ          (150.0f)   /**< Velocidad base de arranque para evitar pérdida de paso [Hz] */
-#define MAX_V_HZ              (1000.0f)  /**< Límite superior absoluto de velocidad por temporizador [Hz] */
-#define MAX_A_HZ_S            (2000.0f)  /**< Rampa máxima de aceleración admisible [Hz/s] */
+#define SPEED_P2P_DEFAULT_HZ  (350.0f)   /**< Velocidad de régimen nominal para traslados P2P [Hz] */
+#define MIN_SPEED_HZ          (150.0f)   /**< Frecuencia de despegue inicial para mitigar pérdida de paso [Hz] */
+#define MAX_V_HZ              (1000.0f)  /**< Frecuencia máxima absoluta admisible por el hardware [Hz] */
+#define MAX_A_HZ_S            (2000.0f)  /**< Rampa máxima de aceleración lineal admisible [Hz/s] */
 
 /**
- * @brief Estados operativos de cada actuador.
+ * @brief Estados operativos de la máquina de estados de cada eje.
  */
 typedef enum {
-    IDLE = 0,       /**< Actuador en reposo con excitación estática */
-    P2P,            /**< Movimiento articular punto a punto con rampa trapezoidal */
-    TRAJ,           /**< Seguimiento de trayectoria polinómica continua */
-    APPROX,         /**< Lazo de aproximación final de alta precisión */
-    HOMING,         /**< Búsqueda activa de posición de referencia */
-    MOTOR_ERROR     /**< Condición de error o parada de emergencia */
+    IDLE = 0,       /**< Actuador en reposo con bobinas excitadas estáticamente */
+    P2P,            /**< Desplazamiento articular punto a punto con perfil trapezoidal */
+    TRAJ,           /**< Seguimiento de trayectoria polinómica continua (Feedforward + P) */
+    HOMING,         /**< Calibración y búsqueda activa de la referencia articular de origen */
+    MOTOR_ERROR     /**< Estado de fallo o enclavamiento por parada de emergencia */
 } MotorState_t;
 
 /**
- * @brief Descriptor de hardware y parámetros de control de cada eje del manipulador.
+ * @brief Descriptor de hardware, telemetría y parámetros de control por eje.
  */
 typedef struct {
     uint8_t id;                     /**< Identificador del eje (1: Cintura, 2: Hombro, 3: Muñeca) */
     float i;                        /**< Relación de reducción mecánica entre motor y articulación */
-    float currentAngle;             /**< Ángulo actual leído por el sensor magnético [°] */
+    float currentAngle;             /**< Ángulo actual medido por el encoder magnético [°] */
     float targetAngle;              /**< Ángulo consigna de destino [°] */
     float angleHoming;              /**< Ángulo de referencia de homing [°] */
 
-    float speed;                    /**< Frecuencia instantánea de pulsos aplicada [Hz] */
-    float targetSpeed;              /**< Frecuencia de régimen consignada [Hz] */
+    float speed;                    /**< Frecuencia instantánea modulada en el timer [Hz] */
+    float targetSpeed;              /**< Frecuencia consignada de crucero [Hz] */
     float minSpeed;                 /**< Frecuencia mínima de arranque [Hz] */
-    float accel;                    /**< Rampa de aceleración configurada [Hz/s] */
+    float accel;                    /**< Rampa de aceleración asignada [Hz/s] */
 
-    float Kp;                       /**< Ganancia proporcional para corrección angular */
-    float Kd;                       /**< Ganancia derivativa */
+    float Kp;                       /**< Ganancia proporcional sobre el error angular de posición */
+    float Kd;                       /**< Ganancia derivativa (modo P2P) */
     float Kg;                       /**< Factor estático de compensación por gravedad */
-    float lastAngleForDeriv;        /**< Muestra previa de ángulo para cálculo derivativo [°] */
-    float filteredVel;              /**< Velocidad angular calculada y filtrada [°/s] */
+    float lastAngleForDeriv;        /**< Muestra angular previa para cálculo derivativo [°] */
+    float filteredVel;              /**< Velocidad angular estimada con filtro pasa-bajos [°/s] */
 
-    GPIO_TypeDef* DIR_PORT;         /**< Puerto GPIO para pin DIR */
-    uint16_t DIR_PIN;               /**< Pin GPIO para pin DIR */
+    GPIO_TypeDef* DIR_PORT;         /**< Puerto GPIO asignado al pin DIR del DRV8825 */
+    uint16_t DIR_PIN;               /**< Pin GPIO asignado al pin DIR del DRV8825 */
     GPIO_PinState dir;              /**< Estado lógico actual del sentido de giro */
-    TIM_HandleTypeDef* timer;       /**< Manejador del temporizador hardware */
+    TIM_HandleTypeDef* timer;       /**< Puntero al temporizador hardware asignado */
     uint32_t timerChannel;          /**< Canal del temporizador configurado en PWM */
-    MotorState_t state;             /**< Estado operativo en la máquina de estados */
+    MotorState_t state;             /**< Estado operativo actual del actuador */
 } Motor;
 
 extern Motor motor1;
@@ -75,29 +76,29 @@ extern Motor motor3;
 extern Motor* motors[3];
 
 /**
- * @brief Modifica la frecuencia de conmutación del temporizador PWM por hardware sin jitter.
+ * @brief Modifica la frecuencia de conmutación del temporizador PWM actualizando el registro ARR.
  *
  * @param[in,out] htim      Puntero a la estructura TIM_HandleTypeDef.
- * @param[in]     channel   Canal PWM correspondiente (ej. TIM_CHANNEL_1).
- * @param[in]     freq_hz   Frecuencia del tren de pulsos en hercios [Hz]. Frecuencia 0 desactiva la salida.
+ * @param[in]     channel   Canal PWM correspondiente (ej. TIM_CHANNEL_1 o TIM_CHANNEL_2).
+ * @param[in]     freq_hz   Frecuencia del tren de pulsos solicitada [Hz]. Un valor < 2 Hz detiene el PWM.
  */
 void Stepper_SetSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq_hz);
 
 /**
- * @brief Calcula el término de compensación por gravedad según la pose articular actual.
+ * @brief Cómputo del par antagonista estático para mitigar el efecto de la gravedad sobre los eslabones.
  *
- * @param[in] m Puntero al descriptor del motor.
- * @return float Componente de corrección en frecuencia [Hz].
+ * @param[in] m Puntero al descriptor del motor a compensar.
+ * @return float Corrección estática calculada en frecuencia equivalente [Hz].
  */
 float computeGravityCompensation(Motor *m);
 
 /**
- * @brief Lazo de control PD de seguimiento de trayectoria con compensación feedforward.
+ * @brief Lazo de control articular: prealimentación de velocidad + realimentación proporcional.
  *
- * @param[in,out] m       Puntero al descriptor del motor.
+ * @param[in,out] m       Puntero al descriptor del actuador.
  * @param[in]     q_ref   Ángulo de referencia instantáneo [°].
- * @param[in]     qd_ref  Velocidad angular de referencia deseada [°/s].
- * @param[in]     dt      Periodo de muestreo [s].
+ * @param[in]     qd_ref  Velocidad articular feedforward de referencia [°/s].
+ * @param[in]     dt      Periodo determinista de muestreo del lazo (0.010 s) [s].
  */
 void trajectoryPDControl(Motor *m, float q_ref, float qd_ref, float dt);
 
@@ -127,17 +128,17 @@ void startP2PMovement(Motor *m, float target_deg, uint32_t speed_hz);
 void startDirectP2PMovement(Motor *m, float target_deg, uint32_t speed_hz);
 
 /**
- * @brief Sincroniza e inicia un movimiento punto a punto coordinado sobre los 3 ejes.
+ * @brief Sincroniza cinemáticamente e inicia un movimiento punto a punto coordinado sobre los 3 ejes.
  *
- * @param[in] target_deg Vector de 3 elementos con las consignas angulares deseadas [°].
+ * @param[in] target_deg Vector de 3 elementos con las consignas angulares deseadas [Q1, Q2, Q3] en [°].
  */
 void startSynchronizedP2PMovement(float target_deg[3]);
 
 /**
- * @brief Actualiza la rampa de aceleración/desaceleración trapezoidal en cada ciclo.
+ * @brief Actualiza la rampa de aceleración/desaceleración trapezoidal en cada ciclo del lazo P2P.
  *
  * @param[in,out] m           Puntero al descriptor del motor.
- * @param[in]     dt_seconds  Tiempo diferencial transcurrido [s].
+ * @param[in]     dt_seconds  Tiempo diferencial transcurrido desde la última invocación [s].
  */
 void updateP2PRamp(Motor *m, float dt_seconds);
 

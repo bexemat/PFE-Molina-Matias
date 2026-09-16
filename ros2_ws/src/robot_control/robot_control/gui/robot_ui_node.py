@@ -1,20 +1,24 @@
-#!/usr/bin/env python3
-"""Punto de entrada de la Interfaz Gráfica de Usuario (GUI) en PyQt5.
+"""Nodo supervisor e interfaz gráfica de usuario unificada (GUI V2) para celda robótica.
 
-Proporciona cinco entornos de control:
- 1. Control Manual articular P2P y cinemática inversa directa.
- 2. Gráficos en tiempo real de seguimiento articular (AS5600 vs Target).
- 3. Planificador cartesiano quíntico local (ctraj).
- 4. Pick-and-Place estático con retroalimentación cenital.
- 5. Intercepción dinámica continua sobre cinta transportadora.
+Este módulo constituye el punto de entrada principal para el control y la supervisión
+de la celda de manufactura y clasificación. Integra concurrentemente:
+    1. Operación manual y diagnóstico P2P: Modulación directa sobre espacio articular y cartesiano.
+    2. Supervisión de visión artificial: Renderizado en tiempo real del flujo de video
+       anotado procedente del nodo cenital[cite: 41].
+    3. Trazado sagital en tiempo real (Y-Z): Monitoreo gráfico de la trayectoria ejecutada
+       por el TCP mediante integración continua a ~30 Hz[cite: 41].
+    4. Máquina de estados autónoma: Coordinación de secuencias estáticas y dinámicas continuas
+       sincronizadas por eventos con el firmware embebido de la STM32[cite: 40, 41].
+
+Arquitectura de concurrencia:
+    Se apoya en la clase ROS2Thread (hilo de trabajo desacoplado) para procesar el ciclo de
+    eventos rclpy.spin(), recibiendo telemetría y publicando consignas de forma no bloqueante
+    mediante señales Qt seguras (pyqtSignal)[cite: 41, 42].
 """
 
 import sys
-import time
 import math
-import collections
 from typing import List, Optional
-
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -32,20 +36,31 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPixmap, QImage
 
-from robot_control.gui.widgets.mpl_canvas import MplCanvas
 from robot_control.gui.widgets.mpl_canvas_yz import MplCanvas2D_YZ
-from robot_control.gui.tabs.dynamic_tab import DynamicTab
 from robot_control.gui.ros_thread import ROS2Thread
-from robot_control.gui.pick_and_place_sm import PickAndPlaceSM
+from robot_control.gui.tabs.dynamic_continuous_tab import (
+    DynamicContinuousTab,
+)
+from robot_control.gui.pick_and_place_sm_v2 import (
+    PickAndPlaceSMV2,
+)
 
+class MainWindowV2(QMainWindow):
+    """Ventana principal de supervisión, control cinemático y monitoreo del robot.
 
-class MainWindow(QMainWindow):
-    """Ventana principal de supervisión y control del robot."""
+    Administra el ciclo de vida de los componentes gráficos, procesa la telemetría
+    articular y cartesiana devuelta por los encoders AS5600, enruta las metas espaciales
+    hacia la máquina de estados PickAndPlaceSMV2 y comanda el enclavamiento del E-Stop[cite: 40, 41].
 
-    DESIRED_CART_VEL: float = 100.0  # Velocidad cartesiana nominal [mm/s]
+    Atributos:
+        ros_thread (ROS2Thread): Instancia del hilo de comunicación reactivo con ROS 2[cite: 41].
+        sm (PickAndPlaceSMV2): Instancia del controlador de estados determinista[cite: 40, 41].
+        plot_timer (QTimer): Temporizador periódico (~30 Hz) dedicado al renderizado del plano sagital[cite: 41].
+    """
 
+    
     def __init__(self, ros_thread: ROS2Thread) -> None:
-        """Inicializa elementos visuales, historiales y lazos de actualización."""
+        """Inicializa componentes visuales y enlaces de comunicación con ROS 2."""
         super().__init__()
         self.ros_thread = ros_thread
 
@@ -56,28 +71,15 @@ class MainWindow(QMainWindow):
         self.pos_xyz: List[float] = [170.0, 0.0, 170.0]
         self.q_target: List[float] = [0.0, 90.0, 0.0]
 
-        # Parámetros del ciclo estático (Pestaña 4)
+        # Parámetros del ciclo estático (Pestaña de Visión Estática)
         self.static_step: int = 0
         self.static_obj_class: int = 1
         self.static_place_x: float = 115.0
         self.static_place_y: float = 115.0
         self.static_place_z: float = 42.0
-        self.static_guard_xyz: List[float] = [215.0, -75.0, 120.0]
+        self.static_guard_xyz: List[float] = [215.0, 0.0, 150.0]
 
-        # Buffers circulares para graficado en tiempo real
-        self.max_points: int = 100
-        self.time_history = collections.deque(maxlen=self.max_points)
-        self.q1_real_hist = collections.deque(maxlen=self.max_points)
-        self.q2_real_hist = collections.deque(maxlen=self.max_points)
-        self.q3_real_hist = collections.deque(maxlen=self.max_points)
-
-        self.q1_target_hist = collections.deque(maxlen=self.max_points)
-        self.q2_target_hist = collections.deque(maxlen=self.max_points)
-        self.q3_target_hist = collections.deque(maxlen=self.max_points)
-
-        self.start_time: float = time.time()
-
-        # Parámetros de visión y trazado sagital Y-Z
+        # Parámetros de trazado sagital Y-Z
         self.vision_target: List[float] = [0.0, 0.0, 0.0]
         self.vision_start_y: Optional[float] = None
         self.vision_start_z: Optional[float] = None
@@ -87,10 +89,7 @@ class MainWindow(QMainWindow):
         self.yz_trace_z: List[float] = []
         self.is_tracking_yz: bool = False
 
-        self.waiting_for_speed: bool = False
-        self.last_detection_time: float = 0.0
-
-        # Conexión de señales del hilo ROS 2
+        # Conexión de señales provenientes del hilo ROS2Thread
         self.ros_thread.feedback_received.connect(self.on_feedback_received)
         self.ros_thread.planner_status_received.connect(
             self.on_planner_status_received
@@ -111,73 +110,47 @@ class MainWindow(QMainWindow):
             )
 
         self.init_ui()
+        self.sm = PickAndPlaceSMV2(self.ros_thread, self.tab_dynamic_v2)
 
-        # Instanciación de la máquina de estados dinámica
-        self.sm = PickAndPlaceSM(self.ros_thread, self.tab_dynamic)
-
-    def calc_duration_100mms(
-        self,
-        p_start: List[float],
-        p_end: List[float],
-        min_dur: float = 0.6,
-    ) -> float:
-        """Calcula el tiempo de trayectoria a velocidad cartesiana constante de 100 mm/s.
-
-        Args:
-            p_start (List[float]): Posición inicial [X, Y, Z] en [mm].
-            p_end (List[float]): Posición final [X, Y, Z] en [mm].
-            min_dur (float, optional): Cota inferior de duración en segundos [s].
-
-        Returns:
-            float: Duración temporal requerida [s].
-        """
-        dist = math.sqrt(
-            (p_end[0] - p_start[0]) ** 2
-            + (p_end[1] - p_start[1]) ** 2
-            + (p_end[2] - p_start[2]) ** 2
-        )
-        return max(min_dur, dist / self.DESIRED_CART_VEL)
-
-    # -------------------------------------------------------------
-    # SLOTS DE RESPUESTA A SEÑALES ROS 2
-    # -------------------------------------------------------------
+        # Temporizador para actualizar el gráfico Y-Z a ~30 Hz
+        self.plot_timer = QTimer()
+        self.plot_timer.timeout.connect(self.update_plots)
+        self.plot_timer.start(33)
 
     def on_vision_class_received(self, clase: int) -> None:
         self.sm.set_object_class(clase)
         self.static_obj_class = clase
 
     def on_vision_target_received(self, target_xyz: List[float]) -> None:
+        """Recibe la posición estática del objeto detectado por visión."""
         self.vision_target = target_xyz
-        if self.sm.auto_step == 2:
-            self.last_detection_time = time.time()
-            self.sm.trigger_ctraj_interception(self.vision_target[1])
 
     def on_vision_dynamic_target_received(
         self, target_xyz: List[float]
     ) -> None:
-        vel_mm_s, _, flag_exitosa = target_xyz
-        if self.waiting_for_speed and flag_exitosa == 1.0:
-            self.sm.set_calculated_vel(vel_mm_s)
-            self.waiting_for_speed = False
-            self.tab_dynamic.lbl_dyn_status.setText(
-                f"Velocidad registrada exitosamente: {vel_mm_s:.2f} mm/s"
-            )
-            self.tab_dynamic.lbl_dyn_status.setStyleSheet(
-                "background-color: #27ae60; color: white; padding: 10px; border-radius: 5px; font-weight: bold;"
-            )
-            self.tab_dynamic.lbl_vel_val.setText(
-                f"Velocidad Seteada: {vel_mm_s:.2f} mm/s"
-            )
+        """Recibe [vel_mm_s, y_actual, flag_medido] del nodo de tracking de visión."""
+        vel_mm_s, y_actual, flag_medido = target_xyz
+
+        self.tab_dynamic_v2.lbl_dyn_vision.setText(
+            f"Y: {y_actual:.1f} mm "
+        )
+
+        if self.sm.is_active():
+            self.sm.process_dynamic_vision(vel_mm_s, y_actual, flag_medido)
 
     def execute_interception(self) -> None:
+        """Dispara el modo dinámico continuo desde la posición configurada en la GUI."""
         if self.estop_active:
             return
-        tracking = self.sm.execute_interception(self.pos_xyz)
-        if tracking:
-            self.is_tracking_yz = True
+        guard_pos = [
+            self.tab_dynamic_v2.spin_gx.value(),
+            self.tab_dynamic_v2.spin_gy.value(),
+            self.tab_dynamic_v2.spin_gz.value(),
+        ]
+        self.sm.start_dynamic_mode(initial_pos=guard_pos)
 
     def execute_vision_trajectory(self) -> None:
-        """Inicia la secuencia de pick-and-place para piezas estáticas."""
+        """Inicia la secuencia de pick-and-place estático con movimientos suaves."""
         if self.estop_active:
             return
 
@@ -203,8 +176,7 @@ class MainWindow(QMainWindow):
         self.is_tracking_yz = True
 
         self.static_step = 1
-        dur = self.calc_duration_100mms(self.pos_xyz, self.vision_target)
-        self.lbl_v_status.setText(f"Estado: PICK hacia objeto (T={dur:.2f}s)")
+        self.lbl_v_status.setText("Estado: PICK hacia objeto...")
         self.lbl_v_status.setStyleSheet(
             "background-color: #8e44ad; color: white; padding: 12px; border-radius: 5px; font-weight: bold;"
         )
@@ -212,50 +184,47 @@ class MainWindow(QMainWindow):
             self.vision_target[0],
             self.vision_target[1],
             self.vision_target[2],
-            duration=dur,
+            duration=1.0,
         )
 
     def on_planner_status_received(self, code: int) -> None:
-        """Despacha las transiciones según el planificador activo."""
-        if self.sm.auto_step > 0:
+        """Procesa códigos de estado publicados por el firmware en /planner/traj_status."""
+        if self.sm.is_active():
             self.sm.process_planner_status(code, self)
             return
 
+        # Lógica de la secuencia estática con transiciones suaves idénticas al modo dinámico
         if code == 1:
-            self.lbl_planner_state.setText(
-                "Estado: TRAYECTORIA EN EJECUCIÓN..."
-            )
-        elif code == 2:
-            self.lbl_planner_state.setText("Estado: COMPLETADO")
+            if hasattr(self, "lbl_v_status"):
+                self.lbl_v_status.setText("Estado: TRAYECTORIA EN EJECUCIÓN...")
+        elif code in [2, 3]:  # Acepta SUCCESS (2) y Asentamiento/TIMEOUT (3) del firmware
+            if hasattr(self, "lbl_v_status"):
+                self.lbl_v_status.setText("Estado: COMPLETADO")
 
             if self.static_step == 1:
-                # Elevación vertical pura (Lift Z=125 mm)
+                # Fase 1: Elevación vertical pura (Lift) suave
                 self.static_step = 2
                 target_lift = [
                     self.vision_target[0],
                     self.vision_target[1],
                     125.0,
                 ]
-                dur = self.calc_duration_100mms(
-                    self.pos_xyz, target_lift, min_dur=0.5
-                )
                 self.lbl_v_status.setText("Estado: Elevando pieza (Lift)...")
                 self.lbl_v_status.setStyleSheet(
                     "background-color: #2980b9; color: white; padding: 12px; border-radius: 5px; font-weight: bold;"
                 )
                 self.ros_thread.send_ctraj_cmd(
-                    target_lift[0], target_lift[1], target_lift[2], duration=dur
+                    target_lift[0], target_lift[1], target_lift[2], duration=0.6
                 )
 
             elif self.static_step == 2:
-                # Traslado elevado al contenedor de descarga (Z=110 mm)
+                # Fase 2: Traslado elevado hacia el contenedor (Suave y parsimonioso)
                 self.static_step = 3
                 target_box_high = [
                     self.static_place_x,
                     self.static_place_y,
                     110.0,
                 ]
-                dur = self.calc_duration_100mms(self.pos_xyz, target_box_high)
                 clase_str = "Cubo" if self.static_obj_class == 1 else "Cono"
                 self.lbl_v_status.setText(
                     f"Estado: PLACE ({clase_str}) hacia X={self.static_place_x}, Y={self.static_place_y}..."
@@ -267,20 +236,17 @@ class MainWindow(QMainWindow):
                     target_box_high[0],
                     target_box_high[1],
                     target_box_high[2],
-                    duration=dur,
+                    duration=1.6,
                 )
 
             elif self.static_step == 3:
-                # Descenso final en contenedor (Z=42 mm)
+                # Fase 3: Descenso final controlado en el contenedor
                 self.static_step = 4
                 target_box_low = [
                     self.static_place_x,
                     self.static_place_y,
                     self.static_place_z,
                 ]
-                dur = self.calc_duration_100mms(
-                    self.pos_xyz, target_box_low, min_dur=0.6
-                )
                 self.lbl_v_status.setText(
                     f"Estado: Descendiendo a Z={self.static_place_z} mm..."
                 )
@@ -288,19 +254,16 @@ class MainWindow(QMainWindow):
                     target_box_low[0],
                     target_box_low[1],
                     target_box_low[2],
-                    duration=dur,
+                    duration=0.8,
                 )
 
             elif self.static_step == 4:
-                # Soltar pieza y retorno a guardia
+                # Fase 4: Soltar pieza y retorno suave a guardia
                 self.static_step = 5
                 self.magnet_active = False
                 self.ros_thread.send_magnet(False)
                 self.btn_magnet.setText("ELECTROIMÁN: APAGADO")
 
-                dur = self.calc_duration_100mms(
-                    self.pos_xyz, self.static_guard_xyz
-                )
                 self.lbl_v_status.setText(
                     "Estado: Pieza depositada. Retornando a guardia..."
                 )
@@ -311,7 +274,7 @@ class MainWindow(QMainWindow):
                     self.static_guard_xyz[0],
                     self.static_guard_xyz[1],
                     self.static_guard_xyz[2],
-                    duration=dur,
+                    duration=1.4,
                 )
 
             elif self.static_step == 5:
@@ -321,16 +284,64 @@ class MainWindow(QMainWindow):
                 self.lbl_v_status.setStyleSheet(
                     "background-color: #ecf0f1; color: #2c3e50; padding: 12px; border-radius: 5px; font-weight: bold;"
                 )
+        elif code < 0:
+            print(f"[Aviso P2P] Código de trayectoria recibido del firmware: {code}")
 
-    # -------------------------------------------------------------
-    # CONFIGURACIÓN VISUAL DE LA INTERFAZ
-    # -------------------------------------------------------------
+    def update_plots(self) -> None:
+        """Actualiza el gráfico Y-Z en tiempo real, gestiona el trazado y fuerza el renderizado."""
+        if self.sm.auto_step == 2:
+            self.yz_trace_y.clear()
+            self.yz_trace_z.clear()
+            self.is_tracking_yz = False
+
+        if self.sm.is_active() and self.sm.auto_step >= 4:
+            if not self.is_tracking_yz:
+                self.vision_start_y = self.pos_xyz[1]
+                self.vision_start_z = self.pos_xyz[2]
+                self.vision_target_y = self.sm.Y_TARGET_PICK
+                self.vision_target_z = self.sm.Z_PICK
+                self.yz_trace_y = []
+                self.yz_trace_z = []
+                self.is_tracking_yz = True
+
+        if self.is_tracking_yz:
+            self.yz_trace_y.append(self.pos_xyz[1])
+            self.yz_trace_z.append(self.pos_xyz[2])
+
+        # Renderizado en la pestaña dinámica
+        canvas = self.tab_dynamic_v2.canvas_yz
+        canvas.plot_yz(
+            self.vision_start_y,
+            self.vision_start_z,
+            self.vision_target_y,
+            self.vision_target_z,
+            self.yz_trace_y,
+            self.yz_trace_z,
+        )
+        if hasattr(canvas, "fig"):
+            canvas.fig.tight_layout()
+        canvas.draw()
+
+        # Renderizado en la pestaña de visión estática
+        if hasattr(self, "canvas_yz_static"):
+            self.canvas_yz_static.plot_yz(
+                self.vision_start_y,
+                self.vision_start_z,
+                self.vision_target_y,
+                self.vision_target_z,
+                self.yz_trace_y,
+                self.yz_trace_z,
+            )
+            if hasattr(self.canvas_yz_static, "fig"):
+                self.canvas_yz_static.fig.tight_layout()
+            self.canvas_yz_static.draw()
 
     def init_ui(self) -> None:
+        """Construye las pestañas de control manual, visión estática y dinámico continuo."""
         self.setWindowTitle(
-            "Control y Monitoreo - EEZYbotARM MK2 (STM32 Embedded)"
+            "Control y Monitoreo Celda Robotizada"
         )
-        self.resize(750, 1020)
+        self.resize(850, 980)
 
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
@@ -339,28 +350,14 @@ class MainWindow(QMainWindow):
         self.setup_tab_control()
         self.tabs.addTab(self.tab_control, "Control Manual (P2P)")
 
-        self.tab_graphs = QWidget()
-        self.setup_tab_graphs()
-        self.tabs.addTab(self.tab_graphs, "Gráficos en Tiempo Real")
-
-        self.tab_planner = QWidget()
-        self.setup_tab_planner()
-        self.tabs.addTab(self.tab_planner, "Planificador Cartesiano (ctraj)")
-
         self.tab_vision = QWidget()
         self.setup_tab_vision()
-        self.tabs.addTab(self.tab_vision, "Interfaz de Visión (Estática)")
+        self.tabs.addTab(self.tab_vision, "Modo Estático Continuo)")
 
-        self.tab_dynamic = DynamicTab()
-        self.tabs.addTab(self.tab_dynamic, "Interfaz Dinámica (Síncrona)")
-
-        self.tab_dynamic.btn_dyn_set_vel.clicked.connect(self.trigger_set_speed)
-        self.tab_dynamic.btn_dyn_exec.clicked.connect(self.execute_interception)
-        self.tab_dynamic.btn_dyn_estop.clicked.connect(self.toggle_estop)
-
-        self.plot_timer = QTimer()
-        self.plot_timer.timeout.connect(self.update_plots)
-        self.plot_timer.start(33)
+        self.tab_dynamic_v2 = DynamicContinuousTab()
+        self.tabs.addTab(self.tab_dynamic_v2, "Modo Dinámico Continuo")
+        self.tab_dynamic_v2.btn_dyn_start.clicked.connect(self.execute_interception)
+        self.tab_dynamic_v2.btn_dyn_estop.clicked.connect(self.toggle_estop)
 
     def setup_tab_control(self) -> None:
         layout = QVBoxLayout(self.tab_control)
@@ -415,12 +412,12 @@ class MainWindow(QMainWindow):
         grid_sliders.addWidget(self.slider_q1, 0, 1)
         grid_sliders.addWidget(self.spin_q1, 0, 2)
 
-        grid_sliders.addWidget(QLabel("Q2 [40° a 157°]:"), 1, 0)
+        grid_sliders.addWidget(QLabel("Q2 [20° a 157°]:"), 1, 0)
         self.slider_q2 = QSlider(Qt.Horizontal)
-        self.slider_q2.setRange(40, 157)
+        self.slider_q2.setRange(20, 157)
         self.slider_q2.setValue(90)
         self.spin_q2 = QDoubleSpinBox()
-        self.spin_q2.setRange(40.0, 157.0)
+        self.spin_q2.setRange(20.0, 157.0)
         self.spin_q2.setValue(90.0)
         self.spin_q2.setSingleStep(0.5)
         self.slider_q2.valueChanged.connect(
@@ -539,84 +536,8 @@ class MainWindow(QMainWindow):
         group_cart.setLayout(grid_cart)
         layout.addWidget(group_cart)
 
-    def setup_tab_graphs(self) -> None:
-        layout = QVBoxLayout(self.tab_graphs)
-        self.canvas = MplCanvas(self, width=5, height=6, dpi=100)
-        layout.addWidget(self.canvas)
-
-    def setup_tab_planner(self) -> None:
-        layout = QVBoxLayout(self.tab_planner)
-
-        self.btn_estop_planner = QPushButton("PARADA DE EMERGENCIA (INACTIVA)")
-        self.btn_estop_planner.setFont(QFont("Arial", 11, QFont.Bold))
-        self.btn_estop_planner.setStyleSheet(
-            "background-color: #27ae60; color: white; padding: 10px; border-radius: 5px;"
-        )
-        self.btn_estop_planner.clicked.connect(self.toggle_estop)
-        layout.addWidget(self.btn_estop_planner)
-
-        group_pstat = QGroupBox("Estado de Ejecución")
-        lay_pstat = QVBoxLayout()
-        self.lbl_planner_state = QLabel("Estado: REPOSO (IDLE)")
-        self.lbl_planner_state.setFont(QFont("Arial", 11, QFont.Bold))
-        self.lbl_planner_state.setAlignment(Qt.AlignCenter)
-        self.lbl_planner_state.setStyleSheet(
-            "color: #2c3e50; padding: 8px; background-color: #ecf0f1; border-radius: 5px;"
-        )
-        lay_pstat.addWidget(self.lbl_planner_state)
-        group_pstat.setLayout(lay_pstat)
-        layout.addWidget(group_pstat)
-
-        group_ctraj = QGroupBox(
-            "Planificación Cartesiana Local en STM32 (Polinomio Quíntico C²)"
-        )
-        lay_ctraj = QVBoxLayout()
-        grid_ctraj = QGridLayout()
-        grid_ctraj.addWidget(QLabel("Meta X [mm]:"), 0, 0)
-        self.spin_cx = QDoubleSpinBox()
-        self.spin_cx.setRange(50, 300)
-        self.spin_cx.setValue(170)
-        grid_ctraj.addWidget(self.spin_cx, 0, 1)
-
-        grid_ctraj.addWidget(QLabel("Meta Y [mm]:"), 0, 2)
-        self.spin_cy = QDoubleSpinBox()
-        self.spin_cy.setRange(-200, 200)
-        grid_ctraj.addWidget(self.spin_cy, 0, 3)
-
-        grid_ctraj.addWidget(QLabel("Meta Z [mm]:"), 0, 4)
-        self.spin_cz = QDoubleSpinBox()
-        self.spin_cz.setRange(20, 280)
-        self.spin_cz.setValue(170)
-        grid_ctraj.addWidget(self.spin_cz, 0, 5)
-
-        grid_ctraj.addWidget(QLabel("Duración [s]:"), 1, 0)
-        self.spin_cdur = QDoubleSpinBox()
-        self.spin_cdur.setRange(0.5, 10.0)
-        self.spin_cdur.setValue(1.5)
-        self.spin_cdur.setSingleStep(0.2)
-        grid_ctraj.addWidget(self.spin_cdur, 1, 1)
-
-        lay_ctraj.addLayout(grid_ctraj)
-
-        btn_ctraj = QPushButton("EJECUTAR CTRAJ QUÍNTICO")
-        btn_ctraj.setFont(QFont("Arial", 10, QFont.Bold))
-        btn_ctraj.setStyleSheet(
-            "background-color: #8e44ad; color: white; padding: 10px; border-radius: 5px;"
-        )
-        btn_ctraj.clicked.connect(
-            lambda: self.ros_thread.send_ctraj_cmd(
-                self.spin_cx.value(),
-                self.spin_cy.value(),
-                self.spin_cz.value(),
-                self.spin_cdur.value(),
-            )
-        )
-        lay_ctraj.addWidget(btn_ctraj)
-        group_ctraj.setLayout(lay_ctraj)
-        layout.addWidget(group_ctraj)
-        layout.addStretch(1)
-
     def setup_tab_vision(self) -> None:
+        """Configura los componentes visuales de la pestaña de Visión Estática."""
         layout = QGridLayout(self.tab_vision)
 
         vbox_coords = QVBoxLayout()
@@ -640,14 +561,14 @@ class MainWindow(QMainWindow):
         vbox_coords.addWidget(group_cart)
         layout.addLayout(vbox_coords, 0, 0)
 
-        group_plot = QGroupBox("Grafico Y-Z")
+        group_plot = QGroupBox("Gráfico Y-Z (Estático)")
         layout_plot = QVBoxLayout()
-        self.canvas_yz = MplCanvas2D_YZ(self, width=4, height=4, dpi=100)
-        layout_plot.addWidget(self.canvas_yz)
+        self.canvas_yz_static = MplCanvas2D_YZ(self, width=4, height=4, dpi=100)
+        layout_plot.addWidget(self.canvas_yz_static)
         group_plot.setLayout(layout_plot)
         layout.addWidget(group_plot, 1, 0)
 
-        group_vision = QGroupBox("Servidor de Vision")
+        group_vision = QGroupBox("Servidor de Visión")
         layout_vision = QVBoxLayout()
         self.lbl_camera = QLabel("Esperando imagen de OpenCV...")
         self.lbl_camera.setAlignment(Qt.AlignCenter)
@@ -658,14 +579,14 @@ class MainWindow(QMainWindow):
         layout.addWidget(group_vision, 0, 1)
 
         vbox_controls = QVBoxLayout()
-        self.btn_v_estop = QPushButton("Boton de Parada")
+        self.btn_v_estop = QPushButton("Botón de Parada")
         self.btn_v_estop.setFont(QFont("Arial", 11, QFont.Bold))
         self.btn_v_estop.setStyleSheet(
             "background-color: #c0392b; color: white; padding: 12px; border-radius: 5px;"
         )
         self.btn_v_estop.clicked.connect(self.toggle_estop)
 
-        self.btn_v_exec = QPushButton("Boton de Ejecucion")
+        self.btn_v_exec = QPushButton("Botón de Ejecución (Estático)")
         self.btn_v_exec.setFont(QFont("Arial", 11, QFont.Bold))
         self.btn_v_exec.setStyleSheet(
             "background-color: #2980b9; color: white; padding: 12px; border-radius: 5px;"
@@ -684,30 +605,28 @@ class MainWindow(QMainWindow):
         vbox_controls.addWidget(self.lbl_v_status)
         layout.addLayout(vbox_controls, 1, 1)
 
-    # -------------------------------------------------------------
-    # CONTROL MANUAL Y TELEMETRÍA
-    # -------------------------------------------------------------
-
     def on_vision_image_received(self, q_img: QImage) -> None:
-        pixmap = QPixmap.fromImage(q_img)
-        self.lbl_camera.setPixmap(
-            pixmap.scaled(self.lbl_camera.size(), Qt.KeepAspectRatio)
-        )
-        self.tab_dynamic.lbl_camera_dyn.setPixmap(
-            pixmap.scaled(self.tab_dynamic.lbl_camera_dyn.size(), Qt.KeepAspectRatio)
-        )
-
-    def trigger_set_speed(self) -> None:
-        if self.estop_active:
+        """Actualiza el flujo de video en las vistas de ambas pestañas."""
+        if q_img.isNull():
             return
-        self.waiting_for_speed = True
-        self.ros_thread.send_trigger_measurement()
-        self.tab_dynamic.lbl_dyn_status.setText(
-            "Recalculando velocidad lineal...\nEsperando que el cubo complete el tramo de calibración."
-        )
-        self.tab_dynamic.lbl_dyn_status.setStyleSheet(
-            "background-color: #f39c12; color: white; padding: 10px; border-radius: 5px;"
-        )
+        pixmap = QPixmap.fromImage(q_img)
+        
+        # Visión Estática
+        if hasattr(self, "lbl_camera"):
+            self.lbl_camera.setPixmap(
+                pixmap.scaled(self.lbl_camera.size(), Qt.KeepAspectRatio)
+            )
+
+        # Dinámico Continuo
+        target_size = self.tab_dynamic_v2.lbl_camera_dyn.size()
+        if target_size.width() > 10 and target_size.height() > 10:
+            self.tab_dynamic_v2.lbl_camera_dyn.setPixmap(
+                pixmap.scaled(
+                    target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+            )
+        else:
+            self.tab_dynamic_v2.lbl_camera_dyn.setPixmap(pixmap)
 
     def send_joint_cmd(self) -> None:
         if self.estop_active:
@@ -753,19 +672,21 @@ class MainWindow(QMainWindow):
             else "PARADA DE EMERGENCIA (INACTIVA)"
         )
         self.btn_estop.setText(btn_text)
-        self.btn_estop_planner.setText(btn_text)
-        self.btn_v_estop.setText(
-            "E-STOP ACTIVADO" if self.estop_active else "Boton de Parada"
-        )
-        self.tab_dynamic.btn_dyn_estop.setText(self.btn_v_estop.text())
+        self.tab_dynamic_v2.btn_dyn_estop.setText(btn_text)
+        if hasattr(self, "btn_v_estop"):
+            self.btn_v_estop.setText(
+                "E-STOP ACTIVADO" if self.estop_active else "Botón de Parada"
+            )
 
     def on_feedback_received(
         self, q_real: List[float], pos_xyz: List[float]
     ) -> None:
         self.q_real = q_real
         self.pos_xyz = pos_xyz
-        self.sm.set_robot_pos(pos_xyz)
+        
+        self.sm.set_robot_telemetry(q_real, pos_xyz)
 
+        # Tab Manual (P2P)
         self.lbl_q1_real.setText(f"Q1: {q_real[0]:.2f}°")
         self.lbl_q2_real.setText(f"Q2: {q_real[1]:.2f}°")
         self.lbl_q3_real.setText(f"Q3: {q_real[2]:.2f}°")
@@ -773,67 +694,39 @@ class MainWindow(QMainWindow):
         self.lbl_y_real.setText(f"Y: {pos_xyz[1]:.2f} mm")
         self.lbl_z_real.setText(f"Z: {pos_xyz[2]:.2f} mm")
 
-        self.lbl_v_q.setText(
-            f"Q1={q_real[0]:.1f}  Q2={q_real[1]:.1f}  Q3={q_real[2]:.1f}"
-        )
-        self.lbl_v_xyz.setText(
-            f"X={pos_xyz[0]:.1f}  Y={pos_xyz[1]:.1f}  Z={pos_xyz[2]:.1f}"
-        )
-        self.tab_dynamic.lbl_dyn_q.setText(self.lbl_v_q.text())
-        self.tab_dynamic.lbl_dyn_xyz.setText(self.lbl_v_xyz.text())
-
-        if self.is_tracking_yz:
-            self.yz_trace_y.append(pos_xyz[1])
-            self.yz_trace_z.append(pos_xyz[2])
-
-    def update_plots(self) -> None:
-        """Actualiza los gráficos de Matplotlib en la interfaz."""
-        t_curr = time.time() - self.start_time
-        self.time_history.append(t_curr)
-        self.q1_real_hist.append(self.q_real[0])
-        self.q2_real_hist.append(self.q_real[1])
-        self.q3_real_hist.append(self.q_real[2])
-
-        self.q1_target_hist.append(self.q_target[0])
-        self.q2_target_hist.append(self.q_target[1])
-        self.q3_target_hist.append(self.q_target[2])
-
-        if self.tabs.currentIndex() == 1:
-            ax1, ax2, ax3 = (
-                self.canvas.axes_q1,
-                self.canvas.axes_q2,
-                self.canvas.axes_q3,
+        # Tab Visión Estática
+        if hasattr(self, "lbl_v_q") and hasattr(self, "lbl_v_xyz"):
+            self.lbl_v_q.setText(
+                f"Q1={q_real[0]:.1f}  Q2={q_real[1]:.1f}  Q3={q_real[2]:.1f}"
             )
-            for ax, th, rh, label, col in [
-                (ax1, self.q1_target_hist, self.q1_real_hist, "Q1 (°)", "b-"),
-                (ax2, self.q2_target_hist, self.q2_real_hist, "Q2 (°)", "g-"),
-                (ax3, self.q3_target_hist, self.q3_real_hist, "Q3 (°)", "m-"),
-            ]:
-                ax.cla()
-                ax.plot(self.time_history, th, "r--", label="Target")
-                ax.plot(self.time_history, rh, col, label="Real (AS5600)")
-                ax.set_ylabel(label)
-                ax.grid(True)
-            self.canvas.draw()
-
-        if self.tabs.currentIndex() == 3:
-            self.canvas_yz.plot_yz(
-                self.vision_start_y,
-                self.vision_start_z,
-                self.vision_target_y,
-                self.vision_target_z,
-                self.yz_trace_y,
-                self.yz_trace_z,
+            self.lbl_v_xyz.setText(
+                f"X={pos_xyz[0]:.1f}  Y={pos_xyz[1]:.1f}  Z={pos_xyz[2]:.1f}"
             )
+
+        # Tab Dinámico Continuo
+        v_q_txt = f"Q1={q_real[0]:.1f}°  Q2={q_real[1]:.1f}°  Q3={q_real[2]:.1f}°"
+        self.tab_dynamic_v2.lbl_dyn_q.setText(v_q_txt)
+
+        fk_txt = f"X: {pos_xyz[0]:.1f} | Y: {pos_xyz[1]:.1f} | Z: {pos_xyz[2]:.1f}"
+        self.tab_dynamic_v2.lbl_dyn_fk.setText(fk_txt)
 
 
 def main(args: Optional[list] = None) -> None:
-    """Punto de arranque de la aplicación GUI."""
+    """Punto de arranque del proceso gráfico y enlace con el entorno ROS 2.
+
+    Inicializa el bucle de eventos de QApplication, dispara el hilo trabajador
+    ROS2Thread en segundo plano, despliega la ventana MainWindowV2 y asegura
+    el cierre ordenado y sincrónico de ambos entornos al finalizar la ejecución.
+
+    Args:
+        args (Optional[list]): Argumentos opcionales de línea de comandos para la aplicación.
+    """
+   
     app = QApplication(sys.argv)
     ros_thread = ROS2Thread()
     ros_thread.start()
 
-    window = MainWindow(ros_thread)
+    window = MainWindowV2(ros_thread)
     window.show()
 
     exit_code = app.exec_()

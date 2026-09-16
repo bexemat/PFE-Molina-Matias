@@ -29,15 +29,15 @@ def generate_launch_description():
             respawn=True
         ),
 
-        # 3. Planificador
+        # 3. Vision Detector
         Node(
             package='robot_control',
-            executable='planner_node',
-            name='trajectory_planner_node',
+            executable='vision_detector_node',
+            name='vision_detector_node',
             output='screen'
         ),
 
-        # 4. Interfaz Gráfica (UI)
+        # 4. Interfaz Gráfica Dinámica + Comandos P2P (UI)
         Node(
             package='robot_control',
             executable='robot_ui_node',
