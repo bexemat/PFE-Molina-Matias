@@ -101,7 +101,7 @@ class VisionDetectorNode(Node):
         self.cap.set(cv2.CAP_PROP_FPS, 30)
 
         # Rangos cromáticos HSV calibrados para objeto de prueba (Rosa)
-        self.lower_hsv: np.ndarray = np.array([140, 144, 110], dtype=np.uint8)
+        self.lower_hsv: np.ndarray = np.array([140, 120, 120], dtype=np.uint8)
         self.upper_hsv: np.ndarray = np.array([179, 255, 255], dtype=np.uint8)
 
         # Elementos estructurantes para operaciones morfológicas

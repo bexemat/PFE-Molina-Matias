@@ -10,7 +10,22 @@
 \usepackage{tabularx}
 \usepackage{geometry}
 \geometry{top=3cm, bottom=3cm, left=3cm, right=3cm}
+
+% Manejo de enlaces y corte de URLs sin desbordar margen
+\PassOptionsToPackage{hyphens}{url}
 \usepackage{hyperref}
+\hypersetup{
+    breaklinks=true,
+    colorlinks=true,
+    linkcolor=primary,
+    citecolor=secondary,
+    urlcolor=accentblue
+}
+
+% Paquetes para evitar desbordes de margen (Overfull \hbox)
+\usepackage{microtype}
+\usepackage[htt]{hyphenat}
+
 \usepackage{titlesec}
 \usepackage{fancyhdr}
 \usepackage{cite}
@@ -64,6 +79,29 @@
     2026
 \end{titlepage}
 
+% ==========================================
+% 2ª CARILLA: RESUMEN / ABSTRACT
+% ==========================================
+\newpage
+\thispagestyle{plain}
+\begin{center}
+    \vspace*{0.5cm}
+    {\Large \textbf{Resumen}}
+    \vspace{0.8cm}
+\end{center}
+
+El presente Proyecto Final de Estudios aborda la evolución, reingeniería e integración funcional de una celda de manufactura robotizada a escala para operaciones de clasificación tipo \textit{pick-and-place} dinámico sobre piezas en movimiento. Tomando como plataforma de partida un manipulador serial de 3 GDL con mecanismo de paralelogramo articulado de cuatro barras desarrollado en un proyecto precedente, se diseñó e incorporó una cinta transportadora motorizada independiente y se transformó la operación estática original en un lazo continuo gobernado por visión artificial y control embebido determinista.
+
+Para superar las restricciones de la plataforma heredada, se llevó a cabo una intervención integral a nivel mecánico, electrónico y computacional. En el aspecto físico, se implementaron acoples con unión por chaveta mecanizada en los ejes motores y un esquema de par trenzado diferencial para restaurar la integridad del bus I2C de los encoders magnéticos AS5600. En el plano cinemático, se descartó el modelo previo basado en articulaciones virtuales de Denavit-Hartenberg, formulando una cinemática inversa geométrica directa libre de singularidades espaciales. Asimismo, se reestructuró la arquitectura de control migrando el cálculo analítico de trayectorias quínticas ($C^2$) y el lazo de velocidad \textit{feedforward} + P a 100~Hz directamente a la FPU del microcontrolador STM32F446RE bajo FreeRTOS, comunicándose mediante micro-ROS con el host de supervisión y una nueva interfaz gráfica interactiva en PyQt5.
+
+La percepción cenital en OpenCV (30~FPS, espacio HSV) introduce un esquema de compuertas espaciales consecutivas sobre la cinta que estima la velocidad lineal de avance en tiempo real ($v_{\text{obj}}$) sin depender de la carga gráfica del supervisor, complementado con un algoritmo de discriminación geométrica invariante a la orientación (Cubo vs. Cono) mediante la relación de envolventes (\textit{Rect Ratio}). Un filtro analítico de factibilidad cinemática evalúa en tiempo de ejecución si el tiempo disponible de arribo satisface los límites dinámicos de aceleración del robot ($T_{\text{MIN\_ROBOT}}$), sincronizando la intercepción mediante una rutina de despegue vertical puro ($Z_{\text{lift}}$) que suprime esfuerzos de corte.
+
+La validación experimental sobre la celda demostró una tasa de éxito del 100\% en modo estático ($N=23$), alcanzando un 77.1\% de efectividad en la captura dinámica y un 74.3\% de ciclo completo clasificado en régimen continuo ($N=35$, $\bar{v} = 75.9\text{ mm/s}$). El sistema demostró capacidad de intercepción exitosa hasta los $108.9\text{ mm/s}$, a partir de la cual el orquestador aborta preventivamente las trayectorias inviables preservando el sincronismo de los actuadores y garantizando la seguridad global de la celda.
+
+\vfill
+\noindent \textbf{Palabras clave:} Robótica de Manipulación, Pick-and-Place Dinámico, ROS 2, micro-ROS, FreeRTOS, Visión Artificial, Cinemática Inversa.
+
+\newpage
 \tableofcontents
 \newpage
 
@@ -153,7 +191,7 @@ En la Tabla~\ref{tab:comparativa_firmware} se resume la evolución de las caract
 
 \begin{table}[H]
 \centering
-\begin{tabular}{p{4cm} p{5cm} p{5cm}}
+\begin{tabularx}{\linewidth}{p{4.2cm} X X}
 \toprule
 \textbf{Dimensión} & \textbf{Versión Anterior} & \textbf{Versión Actual} \\
 \midrule
@@ -161,7 +199,7 @@ Organización & Monolítica (\texttt{main.c}) & Modular por componentes \\
 Trayectorias & Procesadas en PC & Planificadas en FPU del STM32 \\
 Control & Acoplado a ROS & Distribuido (Tareas FreeRTOS) \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Comparativa técnica del firmware.}
 \label{tab:comparativa_firmware}
 \end{table}
@@ -176,14 +214,14 @@ El subsistema embebido implementado sobre la placa NUCLEO-F446RE desacopla la re
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-    scale=0.86,
+    scale=0.88,
     transform shape,
     auto,
     >=Stealth,
-    block/.style={rectangle, draw=black!80, fill=white, thick, text width=4.3cm, align=center, rounded corners=3pt, minimum height=1.15cm},
-    hwblock/.style={rectangle, draw=teal!80!black, fill=teal!8, thick, text width=4.1cm, align=center, rounded corners=3pt, minimum height=1.15cm},
-    rtosblock/.style={rectangle, draw=orange!80!black, fill=orange!10, thick, text width=4.3cm, align=center, rounded corners=3pt, minimum height=1.15cm},
-    mathblock/.style={rectangle, draw=violet!80!black, fill=violet!10, thick, text width=4.1cm, align=center, rounded corners=3pt, minimum height=1.15cm},
+    block/.style={rectangle, draw=black!80, fill=white, thick, text width=4.8cm, align=center, rounded corners=3pt, minimum height=1.2cm},
+    hwblock/.style={rectangle, draw=teal!80!black, fill=teal!8, thick, text width=4.3cm, align=center, rounded corners=3pt, minimum height=1.2cm},
+    rtosblock/.style={rectangle, draw=orange!80!black, fill=orange!10, thick, text width=4.8cm, align=center, rounded corners=3pt, minimum height=1.2cm},
+    mathblock/.style={rectangle, draw=violet!80!black, fill=violet!10, thick, text width=4.3cm, align=center, rounded corners=3pt, minimum height=1.2cm},
     line/.style={draw=black!80, thick, -Latex},
     dashedline/.style={draw=blue!75!black, thick, dashed, -Latex},
     lbl/.style={fill=white, inner sep=2pt, font=\scriptsize, text=black!85, align=center}
@@ -195,12 +233,12 @@ El subsistema embebido implementado sobre la placa NUCLEO-F446RE desacopla la re
         \scriptsize \texttt{/microROS/cmd} \quad \texttt{/planner/traj\_status}
     };
     
-    \node [rtosblock, below=1.2cm of ros] (defaulttask) {
+    \node [rtosblock, below=1.3cm of ros] (defaulttask) {
         \textbf{\texttt{tasks.c} (\texttt{defaultTask})}\\
         \scriptsize micro-ROS Executor + UART DMA
     };
     
-    \node [rtosblock, below=1.3cm of defaulttask] (controltask) {
+    \node [rtosblock, below=1.4cm of defaulttask] (controltask) {
         \textbf{\texttt{tasks.c} (\texttt{mControlTask})}\\
         \scriptsize Lazo determinista a 100 Hz (10 ms)
     };
@@ -224,18 +262,19 @@ El subsistema embebido implementado sobre la placa NUCLEO-F446RE desacopla la re
         \scriptsize e IK trigonométrica
     };
 
-    % Columna izquierda
-    \node [hwblock, left=1.6cm of motors] (sensors) {
+    % Columna izquierda (ampliado a 2.2cm para dar margen limpio a las líneas y textos)
+    \node [hwblock, left=2.2cm of motors] (sensors) {
         \textbf{\texttt{as5600\_tca9548.c}}\\
         \scriptsize Interrupción TIM7 + MUX I2C\\
         \scriptsize 3x Encoders AS5600 (400 kHz)
     };
 
-    % Conexiones
-    \draw [line] (ros) -- node[lbl] {Trama UART DMA} (defaulttask);
-    \draw [line] (defaulttask) -- node[lbl] {Cola \texttt{mid\_PositionQueue}} (controltask);
-    \draw [line] (controltask) -- node[lbl] {$q_{ref}, \dot{q}_{ref}$} (motors);
+    % 1. Conexiones verticales del tronco central
+    \draw [line] (ros.south) -- node[lbl] {Trama UART DMA} (defaulttask.north);
+    \draw [line] (defaulttask.south) -- node[lbl] {Cola \texttt{mid\_PositionQueue}} (controltask.north);
+    \draw [line] (controltask.south) -- node[lbl] {$q_{ref}, \dot{q}_{ref}$} (motors.north);
 
+    % 2. Conexiones horizontales con planificador y cinemática
     \draw [line] ([yshift=3.5mm]controltask.east) -- node[lbl, above] {Ciclo 10 ms} ([yshift=3.5mm]planner.west);
     \draw [line] ([yshift=-3.5mm]planner.west) -- node[lbl, below] {$q_{cmd}, \dot{q}_{cmd}, \text{status}$} ([yshift=-3.5mm]controltask.east);
 
@@ -244,12 +283,26 @@ El subsistema embebido implementado sobre la placa NUCLEO-F446RE desacopla la re
 
     \draw [line] (sensors) -- node[lbl] {$q_{real}$} (motors);
 
+ % 3. Telemetría AS5600: Entrada local a defaultTask (desde sensors)
     \draw [dashedline, rounded corners=6pt] (sensors.north) 
-        -- ++(0, 1.4cm) -| node[lbl, pos=0.35, above] {Telemetría 40 Hz} (defaulttask.west);
+        -- ++(0, 1.8cm)
+        -- node[rotate=90, above=6pt, midway, font=\scriptsize, text=black!85] {Telemetría 40 Hz} ++(0, 2.2cm) 
+        |- ([yshift=-3mm]defaulttask.west);
 
-    \draw [dashedline, rounded corners=8pt] (controltask.west) 
-        -- ++(-2.2cm, 0) |- node[lbl, pos=0.35, above, sloped] {Estado (\texttt{traj\_status})} (ros.west);
+    % 4. Flujo de traj_status local: mControlTask -> defaultTask
+    \draw [dashedline, rounded corners=6pt] (controltask.west) 
+        -- ++(-1.0cm, 0) 
+        -- node[rotate=90, above=5pt, midway, font=\scriptsize, text=black!85] {\texttt{traj\_status}} ++(0, 2.2cm)
+        |- ([yshift=3mm]defaulttask.west);
 
+    % 5. ÚNICA línea de publicación desde defaultTask hacia ROS 2 con los dos tópicos
+    \draw [dashedline, rounded corners=6pt] (defaulttask.west) 
+        -- ++(-2.0cm, 0) 
+        -- node[rotate=90, above=6pt, midway, font=\scriptsize, text=black!85, align=center] {
+            Publica \texttt{/microROS/angles}\\
+            y \texttt{/planner/traj\_status}
+        } ++(0, 2.7cm)
+        |- (ros.west);
 \end{tikzpicture}
 \caption{Mapa de interacción y acoplamiento funcional de los módulos del firmware.}
 \label{fig:mapa_conceptual_firmware}
@@ -373,17 +426,19 @@ La delegación de la planificación de trayectorias al nivel embebido requirió 
         \draw[<->] (uart) -- (executor);
         \draw[->]  (timer) -- (pub);
 
-        \node[box, text width=3.2cm, below=1.3cm of executor, xshift=-5.25cm] (cbCmd) {\texttt{cmd\_callback}\\Trama Cartesiana};
-        \node[box, text width=3.2cm, right=0.3cm of cbCmd] (cbP2p) {\texttt{p2p\_cmd\_callback}\\Joints Directos};
-        \node[box, text width=3.2cm, right=0.3cm of cbP2p] (cbEm)  {\texttt{electromagnet\_}\\\texttt{callback}\\GPIO};
-        \node[box, text width=3.2cm, right=0.3cm of cbP2p] (cbEstop){\texttt{estop\_callback}\\Parada Emergencia};
+        % Callback central alineado exactamente con el ejecutor
+        \node[box, text width=3.0cm, below=1.3cm of executor] (cbP2p) {\texttt{p2p\_cmd\_callback}\\Joints Directos};
+        
+        % Callbacks laterales simétricos
+        \node[box, text width=3.0cm, left=0.4cm of cbP2p] (cbCmd) {\texttt{cmd\_callback}\\Trama Cartesiana};
+        \node[box, text width=3.0cm, right=0.4cm of cbP2p] (cbEstop) {\texttt{estop\_callback}\\Parada Emergencia};
 
         \node[queue, below=0.7cm of cbCmd] (queue) {\texttt{mid\_PositionQueue}};
 
-        \draw[->, rounded corners=8pt] (executor.south) -- ++(0,-0.4) -| (cbCmd.north);
-        \draw[->, rounded corners=6pt] (executor.south) -- ++(0,-0.4) -| (cbP2p.north);
-        \draw[->, rounded corners=6pt] (executor.south) -- ++(0,-0.4) -| (cbEm.north);
-        \draw[->, rounded corners=8pt] (executor.south) -- ++(0,-0.4) -| (cbEstop.north);
+        % Conexiones limpias y simétricas desde executor
+        \draw[->, rounded corners=6pt] (executor.south) -- ++(0,-0.4) -| (cbCmd.north);
+        \draw[->] (executor.south) -- (cbP2p.north);
+        \draw[->, rounded corners=6pt] (executor.south) -- ++(0,-0.4) -| (cbEstop.north);
 
         \draw[->] (cbCmd) -- (queue);
 
@@ -506,7 +561,7 @@ La delegación de la planificación de trayectorias al nivel embebido requirió 
 \begin{table}[H]
 \centering
 \small
-\begin{tabular}{|p{3.3cm}|p{2.3cm}|p{2.6cm}|p{5.8cm}|}
+\begin{tabularx}{\linewidth}{|p{3.0cm}|p{2.1cm}|p{2.5cm}|X|}
 \hline
 \textbf{Parámetro / Macro} & \textbf{Valor} & \textbf{Módulo} & \textbf{Justificación y Criterio} \\
 \hline
@@ -530,7 +585,7 @@ Bus I2C & 400 kHz & \texttt{main.c} & Muestreo de 3 encoders AS5600 vía TIM7 si
 \hline
 Timeout Asentamiento & 0.80 s & \texttt{traj\_planner.c} & Límite temporal para evitar demoras por fricción residual. \\
 \hline
-\end{tabular}
+\end{tabularx}
 \caption{Parámetros operativos y criterios de diseño del Firmware (STM32 / FreeRTOS).}
 \label{tab:parametros_firmware}
 \end{table}
@@ -663,7 +718,7 @@ Para asegurar la sincronización bidireccional entre el firmware embebido y los 
 \begin{table}[H]
 \centering
 \small
-\begin{tabular}{|c|l|p{8.2cm}|}
+\begin{tabularx}{\linewidth}{|c|l|X|}
 \hline
 \textbf{Código} & \textbf{Estado del Planificador} & \textbf{Criterio de Disparo en el Firmware} \\
 \hline
@@ -679,7 +734,7 @@ $\mathbf{-2}$ & \texttt{TRAJ\_STATUS\_ERROR\_IK\_PATH} & Estado reservado ante f
 \hline
 $\mathbf{-3}$ & \texttt{TRAJ\_STATUS\_ABORT\_ESTOP} & Cancelación forzada por parada de emergencia en \texttt{/microROS/emergency\_stop}. \\
 \hline
-\end{tabular}
+\end{tabularx}
 \caption{Códigos de sincronización publicados en \texttt{/planner/traj\_status}.}
 \label{tab:codigos_traj_status}
 \end{table}
@@ -947,7 +1002,7 @@ Actúa como compuerta de arbitraje para mandos manuales y paradas de emergencia.
 \begin{table}[H]
 \centering
 \small
-\begin{tabular}{|p{3.3cm}|p{2.3cm}|p{2.6cm}|p{5.8cm}|}
+\begin{tabularx}{\linewidth}{|p{3.1cm}|p{2.2cm}|p{2.5cm}|X|}
 \hline
 \textbf{Parámetro / Variable} & \textbf{Valor} & \textbf{Módulo} & \textbf{Justificación y Criterio} \\
 \hline
@@ -973,7 +1028,7 @@ Elevación ($Z_{\text{lift}}$) & 125.0 mm (0.6 s) & \texttt{sm\_v2.py} & Despegu
 \hline
 Failsafe Agarre & $Y > 135.0$ mm & \texttt{sm\_v2.py} & Detección de caída y retorno rápido (0.9 s). \\
 \hline
-\end{tabular}
+\end{tabularx}
 \caption{Parámetros de orquestación, visión y máquina de estados (ROS 2 / Python).}
 \label{tab:parametros_supervisor}
 \end{table}
@@ -1215,14 +1270,15 @@ Para reducir el ruido electromagnético inducido y asegurar la estabilidad del b
 \section{Implementación del Nodo de Visión Artificial y Calibración}
 Para dotar al sistema de la capacidad de percibir su entorno, se desarrolló un nodo de visión dedicado en ROS 2 (\texttt{VisionDetectorNode}) integrado con OpenCV, tomando como base arquitecturas de percepción aplicadas a brazos robóticos industriales \cite{bib:vo}. Este subsistema procesa el flujo de video en tiempo real de una cámara cenital conectada mediante un enlace persistente (\textit{symlink}). Dado que las condiciones de iluminación ambiental afectan de forma directa la segmentación cromática, el desarrollo contempló herramientas de calibración que favorecen la repetibilidad del sistema:
 
-    \subsection{Calibración Dinámica y Umbrales en Espacio HSV:} 
-    Mediante una interfaz auxiliar interactiva (\texttt{calibrar\_hsv.py}) provista de controles deslizantes (\textit{trackbars}), es posible sintonizar de forma dinámica los rangos cromáticos del espacio de color HSV (Tono, Saturación y Valor). Esta transformación desacopla la información de color de la intensidad lumínica ambiental, aislando con alta fidelidad la silueta del objeto de prueba respecto al fondo de la cinta. 
-    
-    Para purificar la máscara binaria resultante y eliminar los falsos positivos derivados del ruido del sensor o de reflejos en la superficie de la banda, se implementa una secuencia estricta de filtros morfológicos en dos etapas utilizando elementos estructurantes (\textit{kernels}):
-    \begin{enumerate}
-        \item \textbf{Operación de Cierre (\textit{Morphological Close}):} Se aplica un kernel rectangular de $11\times11$ píxeles de manera iterativa (2 pasadas). Esta operación ejecuta una dilatación seguida de una erosión, lo que permite rellenar pequeños huecos, discontinuidades u oclusiones internas dentro de la silueta segmentada del objeto, asegurando un contorno cerrado y sólido.
-        \item \textbf{Operación de Apertura (\textit{Morphological Open}):} A continuación, se aplica un kernel de menor tamaño de $5\times5$ píxeles. Consiste en una erosión seguida de una dilatación, destinada a suprimir el ruido disperso de fondo (pequeños puntos o motas aisladas que superan el umbral de color pero no pertenecen a una pieza válida).
-    \end{enumerate}
+\subsection{Calibración Dinámica y Umbrales en Espacio HSV} 
+Mediante una interfaz auxiliar interactiva (\texttt{calibrar\_hsv.py}) provista de controles deslizantes (\textit{trackbars}), es posible sintonizar de forma dinámica los rangos cromáticos del espacio de color HSV (Tono, Saturación y Valor). Esta transformación desacopla la información de color de la intensidad lumínica ambiental, aislando con alta fidelidad la silueta del objeto de prueba respecto al fondo de la cinta. 
+
+Para purificar la máscara binaria resultante y eliminar los falsos positivos derivados del ruido del sensor o de reflejos en la superficie de la banda, se implementa una secuencia estricta de filtros morfológicos en dos etapas utilizando elementos estructurantes (\textit{kernels}):
+\begin{enumerate}
+    \item \textbf{Operación de Cierre (\textit{Morphological Close}):} Se aplica un kernel rectangular de $11\times11$ píxeles de manera iterativa (2 pasadas). Esta operación ejecuta una dilatación seguida de una erosión, lo que permite rellenar pequeños huecos, discontinuidades u oclusiones internas dentro de la silueta segmentada del objeto, asegurando un contorno cerrado y sólido.
+    \item \textbf{Operación de Apertura (\textit{Morphological Open}):} A continuación, se aplica un kernel de menor tamaño de $5\times5$ píxeles. Consiste en una erosión seguida de una dilatación, destinada a suprimir el ruido disperso de fondo (pequeños puntos o motas aisladas que superan el umbral de color pero no pertenecen a una pieza válida).
+\end{enumerate}
+
 \subsection{Extracción del Centroide y Publicación en ROS 2}
 Una vez aplicada la máscara de color y filtrado el ruido mediante operaciones morfológicas de apertura y cierre, el nodo analiza los contornos presentes en la escena. Al detectar el objeto de mayor área por encima del umbral establecido, se calculan los momentos espaciales de la imagen mediante la función \texttt{cv2.moments()}. A partir de los momentos de orden cero y uno, se obtiene la posición del centroide en píxeles $(cx, cy)$ aplicando las expresiones:
 
@@ -1235,9 +1291,11 @@ donde $M_{00}$ representa el área total del objeto (momento de orden cero), y $
 
 Esta posición en píxeles es convertida a coordenadas métricas utilizando el modelo polinómico cuadrático calibrado. Finalmente, el nodo empaqueta estas coordenadas espaciales en mensajes estándar de ROS 2 del tipo \texttt{geometry\_msgs/Point} y los transmite mediante dos publicadores: uno de flujo continuo para el modo estático y otro síncrono para las rutinas dinámicas del manipulador.
 
-    \subsection{Mapeo Métrico por Ajuste Polinómico (Píxel a Milímetro):} Para traducir las coordenadas de imagen desde el sistema de píxeles hacia unidades métricas reales en la base del robot, se implementó una rutina de calibración espacial. Este procedimiento se realiza posicionando el efector final a lo largo de la cinta transportadora mediante la cinemática directa (\textit{FK}) de la interfaz gráfica en un rango de $[-140, 140]\text{ mm}$ sobre el eje $Y$ del robot. 
-    
-    Mediante el script \texttt{capturar\_punto.py}, se obtienen las coordenadas centroidales en píxeles de la cámara (correspondientes a la posición horizontal $x$ en la imagen) asociadas a cada posición real conocida. A partir de estos datos, recopilados en la Tabla~\ref{tab:obtension_puntos_calibracion}, se emplea el script de automatización \texttt{calcular\_polinomico.py}. Este programa interactivo procesa los pares empíricos aplicando un modelo de regresión por mínimos cuadrados mediante la función \texttt{np.polyfit()} de NumPy, resolviendo un polinomio de segundo orden de la forma $Y_{\text{robot}} = a \cdot X_{\text{px}}^2 + b \cdot X_{\text{px}} + c$. Su ejecución permite calcular con alta precisión los coeficientes empíricos que compensan los errores de curvatura y distorsión óptica de la lente cenital, garantizando linealidad métrica en todo el trayecto útil sobre la banda.
+\subsection{Mapeo Métrico por Ajuste Polinómico (Píxel a Milímetro)} 
+Para traducir las coordenadas de imagen desde el sistema de píxeles hacia unidades métricas reales en la base del robot, se implementó una rutina de calibración espacial. Este procedimiento se realiza posicionando el efector final a lo largo de la cinta transportadora mediante la cinemática directa (\textit{FK}) de la interfaz gráfica en un rango de $[-140, 140]\text{ mm}$ sobre el eje $Y$ del robot. 
+
+Mediante el script \texttt{capturar\_punto.py}, se obtienen las coordenadas centroidales en píxeles de la cámara (correspondientes a la posición horizontal $x$ en la imagen) asociadas a cada posición real conocida. A partir de estos datos, recopilados en la Tabla~\ref{tab:obtension_puntos_calibracion}, se emplea el script de automatización \texttt{calcular\_polinomico.py}. Este programa interactivo procesa los pares empíricos aplicando un modelo de regresión por mínimos cuadrados mediante la función \texttt{np.polyfit()} de NumPy, resolviendo un polinomio de segundo orden de la forma $Y_{\text{robot}} = a \cdot X_{\text{px}}^2 + b \cdot X_{\text{px}} + c$. Su ejecución permite calcular con alta precisión los coeficientes empíricos que compensan los errores de curvatura y distorsión óptica de la lente cenital, garantizando linealidad métrica en todo el trayecto útil sobre la banda.
+
 \begin{table}[H]
 \centering
 \small
@@ -1312,7 +1370,6 @@ Esta posición en píxeles es convertida a coordenadas métricas utilizando el m
         (478.64, 99.60)
         (512.61, 120.25)
         (539.51, 139.48)
-        
     };
     \addlegendentry{Puntos Experimentales N 15}
 
@@ -1489,8 +1546,8 @@ En los ensayos preliminares de la versión V1, calcular la velocidad en el hilo 
 
 Para mitigar las fluctuaciones temporales (\textit{jitter}) y desacoplar la estimación de la carga de la interfaz, el cálculo de velocidad se trasladó al lazo de procesamiento en OpenCV dentro de \texttt{VisionDetectorNode}. Se establecieron dos compuertas espaciales virtuales fijas sobre la cinta:
 \begin{itemize}
-    \item \textbf{Compuerta de Entrada ($Y_1 = -140.0\text{ mm}$):} Registra la marca temporal de cruce $t_1$ mediante \texttt{time.perf\_counter()} junto a la coordenada observada $y_1$.
-    \item \textbf{Compuerta de Medición y Disparo ($Y_2 = -70.0\text{ mm}$):} Registra la marca temporal $t_2$ y la posición $y_2$ al completar el recorrido nominal fijo $\Delta Y = 70.0\text{ mm}$.
+    \item \textbf{Compuerta de Entrada ($Y\_1 = -140.0\text{ mm}$):} Registra la marca temporal de cruce $t_1$ mediante \texttt{time.perf\_counter()} junto a la coordenada observada $y_1$.
+    \item \textbf{Compuerta de Medición y Disparo ($Y\_2 = -70.0\text{ mm}$):} Registra la marca temporal $t_2$ y la posición $y_2$ al completar el recorrido nominal fijo $\Delta Y = 70.0\text{ mm}$.
 \end{itemize}
 
 La velocidad lineal estimada del objeto se obtiene directamente a partir del diferencial observado en los fotogramas de cruce:
@@ -1520,14 +1577,14 @@ Para compensar el tiempo de retardo electromagnético del solenoide y asegurar q
 Un aspecto crítico en el control coordinado reside en la coexistencia de dos cotas temporales en la arquitectura:
 
 \begin{itemize}
-    \item \textbf{Filtro Analítico en ROS 2 ($T_{\text{MIN\_ROBOT}}$):} 
+    \item \textbf{Filtro Analítico en ROS 2 ($T\_{\text{MIN\_ROBOT}}$):} 
     En el supervisor (\texttt{pick\_and\_place\_sm\_v2.py}), la factibilidad cinemática se evalúa de forma previa al envío del comando calculando analíticamente el tiempo mínimo demandado por el robot según la pose articular instantánea y la cinemática inversa destino:
     \begin{equation}
         T_{\text{MIN\_ROBOT}} = \max\left(0.60\text{ s}, \, \max_{i \in \{1,2,3\}} \frac{1.875 \cdot |\Delta q_i| \cdot \text{DEG\_TO\_STEPS} \cdot i_{red}[i]}{850\text{ Hz}}\right)
     \end{equation}
     Para el trayecto completo nominal desde la guardia ($X=215, Y=-75, Z=100\text{ mm}$) hasta la intercepción ($X=215, Y=120, Z=76\text{ mm}$), este cálculo arroja $T_{\text{MIN\_ROBOT}} \approx 0.85\text{ s}$. Si la velocidad observada impone un tiempo disponible menor ($t_{disp} < T_{\text{MIN\_ROBOT}}$), la máquina de estados aborta preventivamente la intercepción. Esto evita que el manipulador inicie trayectorias inviables donde los motores perderían sincronismo al intentar acelerar por encima de $850\text{ Hz}$.
     
-    \item \textbf{Cota Inferior del Generador Quíntico en Firmware ($t_{\text{min\_fw}} = 0.60\text{ s}$):} 
+    \item \textbf{Cota Inferior del Generador Quíntico en Firmware ($t\_{\text{min\_fw}} = 0.60\text{ s}$):} 
     En \texttt{trajectory\_planner.c}, el microcontrolador evalúa su propia cota de seguridad local. Si recibe una consigna cartesiana corta (por ejemplo, correcciones de elevación o reacomodamientos), el generador garantiza que la duración nunca sea inferior a $0.60\text{ s}$, impidiendo divisiones por cero o sobreaceleraciones locales en la FPU.
 \end{itemize}
 
@@ -1544,7 +1601,7 @@ Durante los primeros ensayos se observó que la fricción estática de las union
 \subsection{Secuencia de Despegue Vertical Puro (\textit{Vertical Lift}) y Retorno Rápido}
 Durante las pruebas experimentales se detectó que iniciar el traslado horizontal hacia los depósitos inmediatamente después del contacto magnético generaba esfuerzos de corte que desprendían la pieza debido a la fricción con la cinta en movimiento. Para evitarlo, la máquina de estados estructuró el ciclo en fases bien definidas:
 \begin{itemize}
-    \item \textbf{Elevación Vertical Pura ($Z_{\text{lift}} = 125.0\text{ mm}$):} El efector asciende verticalmente manteniendo fijas las coordenadas horizontales ($X=215.0\text{ mm}, Y=120.0\text{ mm}$) durante $0.6\text{ s}$, despegando la pieza de la cinta antes de iniciar el giro.
+    \item \textbf{Elevación Vertical Pura ($Z\_{\text{lift}} = 125.0\text{ mm}$):} El efector asciende verticalmente manteniendo fijas las coordenadas horizontales ($X=215.0\text{ mm}, Y=120.0\text{ mm}$) durante $0.6\text{ s}$, despegando la pieza de la cinta antes de iniciar el giro.
     \item \textbf{Traslado y Descarga Clasificada:} Una vez despegada la pieza, se realiza el movimiento cartesiano hacia el contenedor asignado según la geometría identificada (Cubo o Cono).
     \item \textbf{Verificación Continua de Agarre y Descarte Dinámico:} Gracias a la operación asíncrona de la cámara cenital, la máquina de estados continúa monitoreando la posición $Y$ del objeto durante la maniobra. Si tras la fase de elevación ($Z_{\text{lift}}$), la visión constata que la pieza continúa desplazándose sobre la cinta ($Y > 135.0\text{ mm}$), se detecta la pérdida de contacto. El sistema aborta de inmediato la trayectoria hacia las cajas de descarga, apaga el solenoide y regresa a la posición de guardia mediante una trayectoria directa de $0.9\text{ s}$, suprimiendo desplazamientos en vacío.
 \end{itemize}
@@ -1584,7 +1641,7 @@ En la Tabla~\ref{tab:cumplimiento_objetivos} se presenta la contrastación forma
 \begin{table}[H]
 \centering
 \small
-\begin{tabular}{|p{3.8cm}|c|p{8.2cm}|}
+\begin{tabularx}{\linewidth}{|p{3.5cm}|c|X|}
 \hline
 \textbf{Objetivo Específico} & \textbf{Estado} & \textbf{Evidencia / Resultado Alcanzado} \\ \hline
 1. Relevamiento y Diagnóstico & Cumplido & Identificación de fallas en transmisión por fricción, desacoples en I2C, modelo cinemático D-H inadecuado y saturación serial en ROS 2. \\ \hline
@@ -1593,7 +1650,7 @@ En la Tabla~\ref{tab:cumplimiento_objetivos} se presenta la contrastación forma
 4. Planificador Dinámico & Cumplido & Algoritmo de intercepción MRU en ROS 2 sincronizado con trayectoria quíntica local en STM32 ($T_{\text{traj}} = \max(T_{\text{MIN\_ROBOT}}, t_{\text{arribo}} - 0.15\text{ s})$). \\ \hline
 5. Validación Experimental Cuantitativa & Cumplido & Tasa de éxito en agarre del 77.1\% (27/35) y efectividad global de ciclo Pick+Place clasificado del 74.3\% (26/35) en intercepción dinámica continua, con 100\% en modo estático ($N=23$). \\ \hline
 6. Supervisión Remota (Opcional) & No ejecutado & Descartado formalmente para priorizar la robustez del lazo de tiempo real de intercepción dinámica. \\ \hline
-\end{tabular}
+\end{tabularx}
 \caption{Matriz de cumplimiento de objetivos del Proyecto Final de Estudios.}
 \label{tab:cumplimiento_objetivos}
 \end{table}
@@ -1613,7 +1670,7 @@ En la Tabla~\ref{tab:registro_estatico_manual} se detalla el registro empírico 
 \small
 \begin{tabular}{|c|c|c|c|l|}
 \hline
-\textbf{N$^\circ$} & \textbf{$Y_{\text{pick}}$ [mm]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} \\ \hline
+\textbf{N$^\circ$} & \textbf{$Y\_{\text{pick}}$ [mm]} & \textbf{Pick} & \textbf{Place} & \textbf{Clasificación} \\ \hline
 1  & 39.0  & $\checkmark$ & $\checkmark$ & Cubo \\ \hline
 2  & 12.9  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
 3  & 92.2  & $\checkmark$ & $\checkmark$ & Cono \\ \hline
@@ -1651,7 +1708,7 @@ En la Tabla~\ref{tab:registro_dinamico_completo} se detalla el registro empíric
 \begin{table}[H]
 \centering
 \scriptsize
-\begin{tabular}{|c|c|c|c|l|p{5.2cm}|}
+\begin{tabular}{|c|c|c|c|l|p{5.0cm}|}
 \hline
 \textbf{N$^\circ$} & \textbf{V [mm/s]} & \textbf{Pick} & \textbf{Objeto} & \textbf{Clasificación} & \textbf{Observaciones / Diagnóstico} \\ \hline
 1  & 76.0  & $\checkmark$ & Cubo & Cubo & Operación exitosa \\ \hline
